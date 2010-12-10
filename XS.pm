@@ -22,9 +22,6 @@ sub merge {
     my $lists = shift;
     my %opts = @_;
 
-    my $limit = $opts{limit};
-    my $keyer = $opts{key};
-
     # make sure input is sane
     unless ($lists && ref $lists && ref $lists eq 'ARRAY') {
         die "merge requires an array reference";
@@ -35,21 +32,29 @@ sub merge {
         }
     }
 
+    my $limit = $opts{limit} || 0;
+    die "limit must be positive" if defined $limit && $limit < 0;
+
     if (my $keyer = $opts{key}) {
+        die "key option must be a callback" unless ref $keyer eq 'CODE';
+
+        # construct a numeric-only list-of-lists which will be sorted quickly,
+        # then reassociated with values. because the values are kept in a hash,
+        # the merged elements are not kept in stable order.
+
         my %values;
         my @list_of_keys;
         for my $list (@$lists) {
             my @keys;
             for my $el (@$list) {
                 my $key = $keyer->($el);
-                print "$key: $el\n";
                 next unless defined $key;
                 push @keys, $key;
                 push @{ $values{$key} }, $el;
             }
             push @list_of_keys, \@keys;
         }
-        my $sorted_keys = _merge_numeric(\@list_of_keys, $opts{limit});
+        my $sorted_keys = _merge_lists_of_numbers(\@list_of_keys, $limit);
         my @results;
         for my $key (@$sorted_keys) {
             push @results, pop @{ $values{$key} };
@@ -57,15 +62,21 @@ sub merge {
         return \@results;
     }
     else {
-        return _merge_numeric($lists, $opts{limit});
+        return _merge_lists_of_numbers($lists, $limit);
     }
 }
 
-sub _merge_numeric {
-    # XXX switch implementation based on list size
-    _merge_perl_sort(@_);
+sub _merge_lists_of_numbers {
+    my $lists = shift;
+    my $limit = shift;
+
+    # XXX choose implementation based on list size
+    _merge_linear($lists, $limit);
+    #_merge_perl_sort($lists, $limit);
+    #_merge_fib_heap($lists, $limit);
 }
 
+# concatenate all lists and sort the whole thing
 sub _merge_perl_sort {
     my $lists = shift;
     my $limit = shift;

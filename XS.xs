@@ -6,25 +6,56 @@
 
 #include "const-c.inc"
 
-MODULE = List::MergeSorted::XS      PACKAGE = List::MergeSorted::XS
+#include "list.c"
+
+NV get_value(SV* el) {
+    if (SvNOK(el))
+        return SvNV(el);
+    else if (SvIOK(el))
+        return SvIV(el);
+    else
+        croak("non-numeric data encountered");
+    return 0;
+}
+
+MODULE = List::MergeSorted::XS  PACKAGE = List::MergeSorted::XS  PREFIX = l_ms_xs
 
 INCLUDE: const-xs.inc
 
 SV*
-_l_ms_xs_merge_linear(p_lists, limit)
+l_ms_xs_merge_linear(p_lists, limit)
     SV* p_lists
     I32 limit
 CODE:
     AV* lists = (AV*) SvRV(p_lists);
     AV* results = (AV*) sv_2mortal((SV*) newAV());
-    AV* heads = newAV();
+    I32 numlists = av_len(lists) + 1;
     int n;
 
-    for (n = 0; n < av_len(lists); n++) {
+    head_ent* heads = NULL;
+
+    for (n = 0; n < numlists; n++) {
         AV* list = (AV*) SvRV(*av_fetch(lists, n, 0));
         SV** first_el = av_fetch(list, 0, 0);
-        //av_push(results, );
+
+        head_ent* ent = make_ent(get_value(*first_el), n, 0);
+        insert_ent(&heads, ent);
     }
+
+    for (n = 0; heads && (!limit || n < limit); n++) {
+        head_ent* ent = pop_ent(&heads);
+        av_push(results, newSVnv(ent->value));
+
+        AV* list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
+        if (++ent->list_idx <= av_len(list)) {
+            ent->value = get_value(*av_fetch(list, ent->list_idx, 0));
+            insert_ent(&heads, ent);
+        }
+        else {
+            free_ent(ent);
+        }
+    }
+
     RETVAL = newRV((SV*) results);
 OUTPUT:
     RETVAL
