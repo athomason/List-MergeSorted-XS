@@ -71,9 +71,9 @@ sub _merge_lists_of_numbers {
     my $limit = shift;
 
     # XXX choose implementation based on list size
-    _merge_linear($lists, $limit);
+    #_merge_linear($lists, $limit);
     #_merge_perl_sort($lists, $limit);
-    #_merge_fib_heap($lists, $limit);
+    _merge_fib($lists, $limit);
 }
 
 # concatenate all lists and sort the whole thing
