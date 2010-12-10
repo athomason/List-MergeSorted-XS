@@ -37,6 +37,9 @@ CODE:
 
     for (n = 0; n < numlists; n++) {
         AV* list = (AV*) SvRV(*av_fetch(lists, n, 0));
+        if (av_len(list) < 0)
+            continue;
+
         SV** first_el = av_fetch(list, 0, 0);
 
         head_ent* ent = make_ent(get_value(*first_el), n, 0);
