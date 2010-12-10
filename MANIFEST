@@ -1,9 +1,11 @@
+List-MergeSorted-XS.spec
 Changes
 Makefile.PL
 MANIFEST
 ppport.h
 fib.c
 fibpriv.h
+list.c
 README
 XS.xs
 t/List-MergeSorted-XS.t
