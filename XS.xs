@@ -62,6 +62,9 @@ CODE:
         }
     }
 
+    while (heads)
+        lmsxs_free_ent(lmsxs_pop_ent(&heads));
+
     RETVAL = newRV((SV*) results);
 OUTPUT:
     RETVAL
@@ -102,6 +105,9 @@ CODE:
             lmsxs_free_ent(ent);
         }
     }
+
+    while (!fh_empty(heap))
+        lmsxs_free_ent((lmsxs_head_ent*) fh_extractmin(heap));
 
     fh_deleteheap(heap);
 
