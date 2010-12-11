@@ -38,7 +38,7 @@ sub merge {
     if (my $keyer = $opts{key}) {
         die "key option must be a callback" unless ref $keyer eq 'CODE';
 
-        # construct a numeric-only list-of-lists which will be sorted quickly,
+        # construct a integer-only list-of-lists which will be sorted quickly,
         # then reassociated with values. because the values are kept in a hash,
         # the merged elements are not kept in stable order.
 
@@ -67,13 +67,22 @@ sub merge {
 }
 
 sub _merge_lists_of_numbers {
-    my $lists = shift;
-    my $limit = shift;
-
     # XXX choose implementation based on list size
-    #_merge_linear($lists, $limit);
-    #_merge_perl_sort($lists, $limit);
-    _merge_fib($lists, $limit);
+    if (!$ENV{LMSXS_METHOD}) {
+        &_merge_fib;
+    }
+    elsif ($ENV{LMSXS_METHOD} eq 'linear') {
+        &_merge_linear;
+    }
+    elsif ($ENV{LMSXS_METHOD} eq 'fib') {
+        &_merge_fib;
+    }
+    elsif ($ENV{LMSXS_METHOD} eq 'sort') {
+        &_merge_perl_sort;
+    }
+    else {
+        die "unknown sort method $ENV{LMSXS_METHOD} requested\n";
+    }
 }
 
 # concatenate all lists and sort the whole thing
@@ -99,13 +108,13 @@ List::MergeSorted::XS - Fast merger of sorted lists
 
   @lists = ([1, 3, 5], [2, 6, 8], [4, 7, 9]);
 
-  # merge plain numeric lists
+  # merge plain integer lists
   $sorted = merge(\@lists); # $sorted = [1..9]
 
   # return only some
   $first = merge(\@lists, limit => 4); # $first = [1..4]
 
-  # merge complicated objects based on accompanying numeric keys
+  # merge complicated objects based on accompanying integer keys
   @lists = ([[1, 'x'], [3, {t => 1}]], [[2, bless {}, 'C'], [4, 5]]);
   $sorted = merge(\@lists, key => sub { $_->[0] });
 
@@ -135,7 +144,7 @@ returned.
 =item * key
 
 Specifies a callback routine which will be passed an element of an inner list
-in @_. The routine must return the numeric value by which the element will be
+in @_. The routine must return the integer value by which the element will be
 sorted. In effect, the default callback is C<sub {$_[0]}>. This allows more
 complicated structures to be sorted.
 

@@ -1,15 +1,14 @@
-typedef struct _head_ent {
-    NV value; /* numeric value to sort on */
-    I32 list_num; /* index of the list that this value came from */
-    I32 list_idx; /* index into that list of the element this value came from */
-    struct _head_ent* next;
-} head_ent;
+#include "EXTERN.h"
+#include "perl.h"
+#include "XSUB.h"
 
-head_ent*
-make_ent(NV value, I32 list_num, I32 list_idx)
+#include "list.h"
+
+lmsxs_head_ent*
+lmsxs_make_ent(I32 value, I32 list_num, I32 list_idx)
 {
-    head_ent* new_head;
-    Newxz(new_head, 1, head_ent);
+    lmsxs_head_ent* new_head;
+    Newxz(new_head, 1, lmsxs_head_ent);
     new_head->value = value;
     new_head->list_num = list_num;
     new_head->list_idx = list_idx;
@@ -18,16 +17,16 @@ make_ent(NV value, I32 list_num, I32 list_idx)
 }
 
 void
-free_ent(head_ent* ent)
+lmsxs_free_ent(lmsxs_head_ent* ent)
 {
     Safefree(ent);
 }
 
 void
-insert_ent(head_ent** list, head_ent* new_ent)
+lmsxs_insert_ent(lmsxs_head_ent** list, lmsxs_head_ent* new_ent)
 {
-    head_ent* cur;
-    head_ent** ptr_to_cur;
+    lmsxs_head_ent* cur;
+    lmsxs_head_ent** ptr_to_cur;
 
     if (!*list) {
         /* list is empty */
@@ -51,10 +50,10 @@ insert_ent(head_ent** list, head_ent* new_ent)
     *ptr_to_cur = new_ent;
 }
 
-head_ent*
-pop_ent(head_ent** list)
+lmsxs_head_ent*
+lmsxs_pop_ent(lmsxs_head_ent** list)
 {
-    head_ent* first = *list;
+    lmsxs_head_ent* first = *list;
     if (!first)
         return NULL;
     *list = first->next;

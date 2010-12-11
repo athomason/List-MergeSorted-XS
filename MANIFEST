@@ -4,8 +4,10 @@ Makefile.PL
 MANIFEST
 ppport.h
 fib.c
+fib.h
 fibpriv.h
 list.c
+list.h
 README
 XS.xs
 t/List-MergeSorted-XS.t

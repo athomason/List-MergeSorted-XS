@@ -12,6 +12,8 @@ WriteMakefile(
     LIBS              => [''], # e.g., '-lm'
     DEFINE            => '', # e.g., '-DHAVE_SOMETHING'
     INC               => '-I.', # e.g., '-I. -I/usr/include/other'
+    C                 => ['fib.c', 'list.c'],
+    OBJECT            => "XS.o fib.o list.o",
 );
 if  (eval {require ExtUtils::Constant; 1}) {
   # If you edit these definitions to change the constants used by this module,
