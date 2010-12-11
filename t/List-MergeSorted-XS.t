@@ -62,10 +62,13 @@ is_deeply($merged, [$lists[0][0], $lists[1][0], $lists[0][1]], 'limited complex'
 srand(999); # use random but reproducible data sets
 for my $test (1 .. 10) {
     @lists = ();
-    for (1 .. 2 + int rand 100) {
+    for (1 .. 1 + int rand 10) {
         push @lists, [sort {$a <=> $b} map { int rand 1000 } 1 .. int rand 100];
     }
-    $merged = merge(\@lists);
-    my $expected = [sort {$a <=> $b} map {@$_} @lists];
-    is_deeply($merged, $expected, "random $test");
+    my %opts;
+    $opts{limit} = 1 + int rand 100 if rand() > .5;
+    $merged = merge(\@lists, %opts);
+    my @expected = sort {$a <=> $b} map {@$_} @lists;
+    splice @expected, $opts{limit} if defined $opts{limit} && @expected > $opts{limit};
+    is_deeply($merged, \@expected, "random $test");
 }
