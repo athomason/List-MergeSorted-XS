@@ -72,9 +72,6 @@ sub _merge_lists_of_numbers {
     if (scalar @$lists == 0) {
         return [];
     }
-    elsif (scalar @$lists == 1) {
-        return [@{ $lists->[0] }];
-    }
 
     if (!$ENV{LMSXS_METHOD}) {
         &_merge_fib;
