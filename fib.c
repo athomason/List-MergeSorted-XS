@@ -23,17 +23,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- */
-
-/*
- *
- *	updated in 2009, by Sergey Aleynikov
- *  for safe usage inside perl
- *  see copyright notice in Fast.pod
+ *	$Id: fib.c,v 1.31 2003/01/14 10:11:30 jmg Exp $
  *
  */
 
+#include "EXTERN.h"
+#include "perl.h"
+#include "XSUB.h"
+
+#include "fib.h"
 #include "fibpriv.h"
+
+#include <limits.h>
+#include <stdlib.h>
 
 #define swap(type, a, b)		\
 		do {			\
@@ -44,12 +46,12 @@
 		} while (0)		\
 
 #define INT_BITS        (sizeof(int) * 8)
-
 static inline int
-ceillog2(unsigned int a) {
+ceillog2(unsigned int a)
+{
 	int oa;
 	int i;
-	unsigned int b;
+	int b;
 
 	oa = a;
 	b = INT_BITS / 2;
@@ -63,105 +65,136 @@ ceillog2(unsigned int a) {
 			a &= (1 << b) - 1;
 		b /= 2;
 	}
-	if ((1 << i) == oa){
+	if ((1 << i) == oa)
 		return i;
-	}else{
+	else
 		return i + 1;
-	}
 }
 
 /*
  * Private Heap Functions
  */
 static void
-fh_deleteel(struct fibheap *h, struct fibheap_el *x) {
+fh_deleteel(struct fibheap *h, struct fibheap_el *x)
+{
 	void *data;
 	int key;
 
 	data = x->fhe_data;
 	key = x->fhe_key;
 
-	switch(h->fh_keys){
-		case min_keyed:
-			fh_replacekey(h, x, INT_MIN);
-			break;
-
-		case max_keyed:
-			fh_replacekey(h, x, INT_MAX);
-			break;
-
-		case callback:
-			fh_replacedata(h, x, NULL);
-			break;
-	}
-
+	if (!h->fh_keys)
+		fh_replacedata(h, x, h->fh_neginf);
+	else
+		fh_replacekey(h, x, INT_MIN);
 	if (fh_extractminel(h) != x) {
 		/*
 		 * XXX - This should never happen as fh_replace should set it
 		 * to min.
 		 */
-		croak("Extracted minimum was not the expected one");
+		abort();
 	}
 
 	x->fhe_data = data;
 	x->fhe_key = key;
 }
 
-static inline void
-fh_initheap(struct fibheap *heap) {
-	heap->fh_Dl = -1;
-}
-
-static inline void
-fh_emptyheap(struct fibheap *h) {
-	SV* elem;
-	/*
-	 * We could do this even faster by walking each binomial tree, but
-	 * this is simpler to code.
-	 */
-	while (elem = (SV*)fh_extractmin(h)){
-		SvREFCNT_dec(elem);
-	}
+static void
+fh_initheap(struct fibheap *new)
+{
+	new->fh_cmp_fnct = NULL;
+	new->fh_neginf = NULL;
+	new->fh_n = 0;
+	new->fh_Dl = -1;
+	new->fh_cons = NULL;
+	new->fh_min = NULL;
+	new->fh_root = NULL;
+	new->fh_keys = 0;
+#ifdef FH_STATS
+	new->fh_maxn = 0;
+	new->fh_ninserts = 0;
+	new->fh_nextracts = 0;
+#endif
 }
 
 static void
-fh_destroyheap(struct fibheap *h) {
-	if(h->fh_keys == callback)
-		SvREFCNT_dec(h->comparator);
-
+fh_destroyheap(struct fibheap *h)
+{
+	h->fh_cmp_fnct = NULL;
+	h->fh_neginf = NULL;
 	if (h->fh_cons != NULL)
 		Safefree(h->fh_cons);
-
+	h->fh_cons = NULL;
 	Safefree(h);
 }
 
 /*
  * Public Heap Functions
  */
-static inline struct fibheap *
-fh_makeheap(enum fh_type type) {
+struct fibheap *
+fh_makekeyheap()
+{
 	struct fibheap *n;
 
-	Newxz(n, 1, struct fibheap);
+    Newx(n, sizeof(*n), struct fibheap);
+	if (n == NULL)
+		return NULL;
+
 	fh_initheap(n);
-	n->fh_keys = type;
+	n->fh_keys = 1;
 
 	return n;
 }
 
-static inline void
-fh_union(struct fibheap *ha, struct fibheap *hb) {
+struct fibheap *
+fh_makeheap()
+{
+	struct fibheap *n;
+
+    Newx(n, sizeof(*n), struct fibheap);
+	if (n == NULL)
+		return NULL;
+
+	fh_initheap(n);
+
+	return n;
+}
+
+voidcmp
+fh_setcmp(struct fibheap *h, voidcmp fnct)
+{
+	voidcmp oldfnct;
+	
+	oldfnct = h->fh_cmp_fnct;
+	h->fh_cmp_fnct = fnct;
+
+	return oldfnct;
+}
+
+void *
+fh_setneginf(struct fibheap *h, void *data)
+{
+	void *old;
+
+	old = h->fh_neginf;
+	h->fh_neginf = data;
+
+	return old;
+}
+
+struct fibheap *
+fh_union(struct fibheap *ha, struct fibheap *hb)
+{
 	struct fibheap_el *x;
 
 	if (ha->fh_root == NULL || hb->fh_root == NULL) {
 		/* either one or both are empty */
 		if (ha->fh_root == NULL) {
 			fh_destroyheap(ha);
-			ha = hb;
-			return;
+			return hb;
 		} else {
 			fh_destroyheap(hb);
-			return;
+			return ha;
 		}
 	}
 	ha->fh_root->fhe_left->fhe_right = hb->fh_root;
@@ -170,22 +203,47 @@ fh_union(struct fibheap *ha, struct fibheap *hb) {
 	ha->fh_root->fhe_left = hb->fh_root->fhe_left;
 	hb->fh_root->fhe_left = x;
 	ha->fh_n += hb->fh_n;
+	/*
+	 * we probably should also keep stats on number of unions
+	 */
 
 	/* set fh_min if necessary */
 	if (fh_compare(ha, hb->fh_min, ha->fh_min) < 0)
 		ha->fh_min = hb->fh_min;
 
 	fh_destroyheap(hb);
+	return ha;
+}
+
+int
+fh_empty(struct fibheap *h)
+{
+    return !h->fh_n;
+}
+
+void
+fh_deleteheap(struct fibheap *h)
+{
+	/*
+	 * We could do this even faster by walking each binomial tree, but
+	 * this is simpler to code.
+	 */
+	while (h->fh_min != NULL)
+		fhe_destroy(fh_extractminel(h));
+
+	fh_destroyheap(h);
 }
 
 /*
  * Public Key Heap Functions
  */
-static inline struct fibheap_el *
-fh_insertkey(struct fibheap *h, int key, void *data) {
+struct fibheap_el *
+fh_insertkey(struct fibheap *h, int key, void *data)
+{
 	struct fibheap_el *x;
 
-	x = fhe_newelem();
+	if ((x = fhe_newelem()) == NULL)
+		return NULL;
 
 	/* just insert on root list, and make sure it's not the new min */
 	x->fhe_data = data;
@@ -196,22 +254,34 @@ fh_insertkey(struct fibheap *h, int key, void *data) {
 	return x;
 }
 
-static inline void
-fh_replacedata(struct fibheap *h, struct fibheap_el *x, void *data){
-	fh_replacekeydata(h, x, x->fhe_key, data);
+int
+fh_minkey(struct fibheap *h)
+{
+	if (h->fh_min == NULL)
+		return INT_MIN;
+	return h->fh_min->fhe_key;
 }
 
-static inline void
-fh_replacekey(struct fibheap *h, struct fibheap_el *x, int key) {
-	fh_replacekeydata(h, x, key, x->fhe_data);
+int
+fh_replacekey(struct fibheap *h, struct fibheap_el *x, int key)
+{
+	int ret;
+
+	ret = x->fhe_key;
+	(void)fh_replacekeydata(h, x, key, x->fhe_data);
+
+	return ret;
 }
 
-static void
-fh_replacekeydata(struct fibheap *h, struct fibheap_el *x, int key, void *data) {
+void *
+fh_replacekeydata(struct fibheap *h, struct fibheap_el *x, int key, void *data)
+{
+	void *odata;
 	int okey;
 	struct fibheap_el *y;
 	int r;
 
+	odata = x->fhe_data;
 	okey = x->fhe_key;
 
 	/*
@@ -219,6 +289,8 @@ fh_replacekeydata(struct fibheap *h, struct fibheap_el *x, int key, void *data) 
 	 * requires O(lgn) time.
 	 */
 	if ((r = fh_comparedata(h, key, data, x)) > 0) {
+		/* XXX - bad code! */
+		abort();
 		fh_deleteel(h, x);
 
 		x->fhe_data = data;
@@ -226,7 +298,7 @@ fh_replacekeydata(struct fibheap *h, struct fibheap_el *x, int key, void *data) 
 
 		fh_insertel(h, x);
 
-		return;
+		return odata;
 	}
 
 	x->fhe_data = data;
@@ -234,12 +306,12 @@ fh_replacekeydata(struct fibheap *h, struct fibheap_el *x, int key, void *data) 
 
 	/* because they are equal, we don't have to do anything */
 	if (r == 0)
-		return;
+		return odata;
 
 	y = x->fhe_p;
 
-	if (h->fh_keys != callback && okey == key)
-		return;
+	if (h->fh_keys && okey == key)
+		return odata;
 
 	if (y != NULL && fh_compare(h, x, y) <= 0) {
 		fh_cut(h, x, y);
@@ -247,11 +319,13 @@ fh_replacekeydata(struct fibheap *h, struct fibheap_el *x, int key, void *data) 
 	}
 
 	/*
-	 * the = is so that the call from fh_deleteel will delete the proper
+	 * the = is so that the call from fh_delete will delete the proper
 	 * element.
 	 */
 	if (fh_compare(h, x, h->fh_min) <= 0)
 		h->fh_min = x;
+
+	return odata;
 }
 
 /*
@@ -262,11 +336,13 @@ fh_replacekeydata(struct fibheap *h, struct fibheap_el *x, int key, void *data) 
  *	NULL	failed for some reason
  *	ptr	token to use for manipulation of data
  */
-static inline struct fibheap_el *
-fh_insert(struct fibheap *h, void *data) {
+struct fibheap_el *
+fh_insert(struct fibheap *h, void *data)
+{
 	struct fibheap_el *x;
 
-	x = fhe_newelem();
+	if ((x = fhe_newelem()) == NULL)
+		return NULL;
 
 	/* just insert on root list, and make sure it's not the new min */
 	x->fhe_data = data;
@@ -276,15 +352,17 @@ fh_insert(struct fibheap *h, void *data) {
 	return x;
 }
 
-static inline void *
-fh_min(struct fibheap const *h) {
+void *
+fh_min(struct fibheap *h)
+{
 	if (h->fh_min == NULL)
 		return NULL;
 	return h->fh_min->fhe_data;
 }
 
-static void *
-fh_extractmin(struct fibheap *h) {
+void *
+fh_extractmin(struct fibheap *h)
+{
 	struct fibheap_el *z;
 	void *ret;
 
@@ -293,17 +371,65 @@ fh_extractmin(struct fibheap *h) {
 	if (h->fh_min != NULL) {
 		z = fh_extractminel(h);
 		ret = z->fhe_data;
+#ifndef NO_FREE
 		fhe_destroy(z);
+#endif
+
 	}
 
 	return ret;
 }
 
+void *
+fh_replacedata(struct fibheap *h, struct fibheap_el *x, void *data)
+{
+	return fh_replacekeydata(h, x, x->fhe_key, data);
+}
+
+void *
+fh_delete(struct fibheap *h, struct fibheap_el *x)
+{
+	void *k;
+
+	k = x->fhe_data;
+	if (!h->fh_keys)
+		fh_replacedata(h, x, h->fh_neginf);
+	else
+		fh_replacekey(h, x, INT_MIN);
+	fh_extractmin(h);
+
+	return k;
+}
+
+/*
+ * Statistics Functions
+ */
+#ifdef FH_STATS
+int
+fh_maxn(struct fibheap *h)
+{
+	return h->fh_maxn;
+}
+
+int
+fh_ninserts(struct fibheap *h)
+{
+	return h->fh_ninserts;
+}
+
+int
+fh_nextracts(struct fibheap *h)
+{
+	return h->fh_nextracts;
+}
+#endif
+
 /*
  * begin of private element fuctions
  */
 static struct fibheap_el *
-fh_extractminel(struct fibheap *h) {
+fh_extractminel(struct fibheap *h)
+{
 	struct fibheap_el *ret;
 	struct fibheap_el *x, *y, *orig;
 
@@ -332,11 +458,16 @@ fh_extractminel(struct fibheap *h) {
 		fh_consolidate(h);
 	}
 
+#ifdef FH_STATS
+	h->fh_nextracts++;
+#endif
+
 	return ret;
 }
 
 static void
-fh_insertrootlist(struct fibheap *h, struct fibheap_el *x) {
+fh_insertrootlist(struct fibheap *h, struct fibheap_el *x)
+{
 	if (h->fh_root == NULL) {
 		h->fh_root = x;
 		x->fhe_left = x;
@@ -347,8 +478,9 @@ fh_insertrootlist(struct fibheap *h, struct fibheap_el *x) {
 	fhe_insertafter(h->fh_root, x);
 }
 
-static inline void
-fh_removerootlist(struct fibheap *h, struct fibheap_el *x) {
+static void
+fh_removerootlist(struct fibheap *h, struct fibheap_el *x)
+{
 	if (x->fhe_left == x)
 		h->fh_root = NULL;
 	else
@@ -356,7 +488,8 @@ fh_removerootlist(struct fibheap *h, struct fibheap_el *x) {
 }
 
 static void
-fh_consolidate(struct fibheap *h) {
+fh_consolidate(struct fibheap *h)
+{
 	struct fibheap_el **a;
 	struct fibheap_el *w;
 	struct fibheap_el *y;
@@ -393,13 +526,15 @@ fh_consolidate(struct fibheap *h) {
 	for (i = 0; i < D; i++)
 		if (a[i] != NULL) {
 			fh_insertrootlist(h, a[i]);
-			if (h->fh_min == NULL || fh_compare(h, a[i], h->fh_min) < 0)
+			if (h->fh_min == NULL || fh_compare(h, a[i],
+			    h->fh_min) < 0)
 				h->fh_min = a[i];
 		}
 }
 
-static inline void
-fh_heaplink(struct fibheap const *h, struct fibheap_el *y, struct fibheap_el *x) {
+static void
+fh_heaplink(struct fibheap *h, struct fibheap_el *y, struct fibheap_el *x)
+{
 	/* make y a child of x */
 	if (x->fhe_child == NULL)
 		x->fhe_child = y;
@@ -410,8 +545,9 @@ fh_heaplink(struct fibheap const *h, struct fibheap_el *y, struct fibheap_el *x)
 	y->fhe_mark = 0;
 }
 
-static inline void
-fh_cut(struct fibheap *h, struct fibheap_el *x, struct fibheap_el *y) {
+static void
+fh_cut(struct fibheap *h, struct fibheap_el *x, struct fibheap_el *y)
+{
 	fhe_remove(x);
 	y->fhe_degree--;
 	fh_insertrootlist(h, x);
@@ -420,7 +556,8 @@ fh_cut(struct fibheap *h, struct fibheap_el *x, struct fibheap_el *y) {
 }
 
 static void
-fh_cascading_cut(struct fibheap *h, struct fibheap_el *y) {
+fh_cascading_cut(struct fibheap *h, struct fibheap_el *y)
+{
 	struct fibheap_el *z;
 
 	while ((z = y->fhe_p) != NULL) {
@@ -437,24 +574,35 @@ fh_cascading_cut(struct fibheap *h, struct fibheap_el *y) {
 /*
  * begining of handling elements of fibheap
  */
-static inline struct fibheap_el *
-fhe_newelem() {
+static struct fibheap_el *
+fhe_newelem()
+{
 	struct fibheap_el *e;
 
-	Newxz(e, 1, struct fibheap_el);
+    Newx(e, sizeof(*e), struct fibheap_el);
+	if (e == NULL)
+		return NULL;
+
 	fhe_initelem(e);
 
 	return e;
 }
 
-static inline void
-fhe_initelem(struct fibheap_el *e) {
+static void
+fhe_initelem(struct fibheap_el *e)
+{
+	e->fhe_degree = 0;
+	e->fhe_mark = 0;
+	e->fhe_p = NULL;
+	e->fhe_child = NULL;
 	e->fhe_left = e;
 	e->fhe_right = e;
+	e->fhe_data = NULL;
 }
 
-static inline void
-fhe_insertafter(struct fibheap_el *a, struct fibheap_el *b) {
+static void
+fhe_insertafter(struct fibheap_el *a, struct fibheap_el *b)
+{
 	if (a == a->fhe_right) {
 		a->fhe_right = b;
 		a->fhe_left = b;
@@ -469,12 +617,14 @@ fhe_insertafter(struct fibheap_el *a, struct fibheap_el *b) {
 }
 
 static inline void
-fhe_insertbefore(struct fibheap_el *a, struct fibheap_el *b) {
+fhe_insertbefore(struct fibheap_el *a, struct fibheap_el *b)
+{
 	fhe_insertafter(a->fhe_left, b);
 }
 
 static struct fibheap_el *
-fhe_remove(struct fibheap_el *x) {
+fhe_remove(struct fibheap_el *x)
+{
 	struct fibheap_el *ret;
 
 	if (x == x->fhe_left)
@@ -497,8 +647,9 @@ fhe_remove(struct fibheap_el *x) {
 	return ret;
 }
 
-static inline void
-fh_checkcons(struct fibheap *h) {
+static void
+fh_checkcons(struct fibheap *h)
+{
 	int oDl;
 
 	/* make sure we have enough memory allocated to "reorganize" */
@@ -507,88 +658,28 @@ fh_checkcons(struct fibheap *h) {
 		if ((h->fh_Dl = ceillog2(h->fh_n) + 1) < 8)
 			h->fh_Dl = 8;
 		if (oDl != h->fh_Dl)
-			Renew(h->fh_cons, h->fh_Dl + 1, struct fibheap_el **);
+            Renew(h->fh_cons, sizeof *h->fh_cons * (h->fh_Dl + 1), struct fibheap_el **);
+		if (h->fh_cons == NULL)
+			abort();
 	}
 }
 
-static inline int
-int_key_min_compare(int a, int b){
-	if (a < b)
-		return -1;
-	if (a == b)
-		return 0;
-	return 1;
-}
-
-static inline int
-int_key_max_compare(int a, int b){
-	if (a > b)
-		return -1;
-	if (a == b)
-		return 0;
-	return 1;
-}
-
 static int
-data_compare(struct fibheap const *h, void const * a, void const * b){
-	int iret;
-	GV* local_a;
-	GV* local_b;
-
-	if(a == NULL)
-		return -1;
-
-	if(b == NULL)
+fh_compare(struct fibheap *h, struct fibheap_el *a, struct fibheap_el *b)
+{
+	if (h->fh_keys) {
+		if (a->fhe_key < b->fhe_key)
+			return -1;
+		if (a->fhe_key == b->fhe_key)
+			return 0;
 		return 1;
-
-	dSP;
-
-/*	ENTER; SAVETMPS;	*/
-
-	local_a = gv_fetchpv("a", TRUE, SVt_PV);
-	local_b = gv_fetchpv("b", TRUE, SVt_PV);
-
-	SAVESPTR(GvSV(local_a));
-	SAVESPTR(GvSV(local_b));
-
-	GvSV(local_a) = a;
-	GvSV(local_b) = b;
-
-	PUSHMARK(SP);
-	iret = call_sv(h->comparator, G_SCALAR | G_NOARGS);
-	SPAGAIN;
-
-	if (iret != 1){
-		croak("Your order routine didn't return a value");
-	}
-	iret = POPi;
-	PUTBACK;
-
-	if(iret < -1 || iret > 1){
-		croak("Your order routine returned something odd: %d", iret);
-	}
-
-/*	FREETMPS; LEAVE;	*/
-
-	return iret;
+	} else
+		return h->fh_cmp_fnct(a->fhe_data, b->fhe_data);
 }
 
 static int
-fh_compare(struct fibheap const *h, struct fibheap_el const *a, struct fibheap_el const *b) {
-	switch (h->fh_keys) {
-		case min_keyed:
-			return int_key_min_compare(a->fhe_key, b->fhe_key);
-
-		case max_keyed:
-			return int_key_max_compare(a->fhe_key, b->fhe_key);
-
-		case callback:
-			return data_compare(h, a->fhe_data, b->fhe_data);
-	}
-}
-
-static inline int
-fh_comparedata(struct fibheap const *h, int key, void *data, struct fibheap_el const *b) {
+fh_comparedata(struct fibheap *h, int key, void *data, struct fibheap_el *b)
+{
 	struct fibheap_el a;
 
 	a.fhe_key = key;
@@ -598,11 +689,20 @@ fh_comparedata(struct fibheap const *h, int key, void *data, struct fibheap_el c
 }
 
 static void
-fh_insertel(struct fibheap *h, struct fibheap_el *x) {
+fh_insertel(struct fibheap *h, struct fibheap_el *x)
+{
 	fh_insertrootlist(h, x);
 
-	if (h->fh_min == NULL || fh_compare(h, x, h->fh_min) < 0)
+	if (h->fh_min == NULL || (h->fh_keys ? x->fhe_key < h->fh_min->fhe_key
+	    : h->fh_cmp_fnct(x->fhe_data, h->fh_min->fhe_data) < 0))
 		h->fh_min = x;
 
 	h->fh_n++;
+
+#ifdef FH_STATS
+	if (h->fh_n > h->fh_maxn)
+		h->fh_maxn = h->fh_n;
+	h->fh_ninserts++;
+#endif
+
 }
