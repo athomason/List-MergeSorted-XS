@@ -100,7 +100,7 @@ sub _merge_sort_flat {
     my $limit = shift;
 
     my @output = sort {$a <=> $b} map {@$_} @$lists;
-    splice @output, $limit if $limit;
+    splice @output, $limit if defined $limit && @output > $limit;
     return \@output;
 }
 
@@ -114,7 +114,7 @@ sub _merge_sort_keyed {
         map  { @$_ }
         @$lists;
 
-    splice @output, $limit if $limit;
+    splice @output, $limit if $limit && @output > $limit;
     return \@output;
 }
 
