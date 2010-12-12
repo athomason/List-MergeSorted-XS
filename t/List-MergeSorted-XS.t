@@ -3,7 +3,7 @@
 
 #########################
 
-use Test::More tests => 54;
+use Test::More tests => 56;
 use_ok('List::MergeSorted::XS');
 
 #########################
@@ -34,6 +34,15 @@ like($@, qr/integer/, 'string element rejected');
 
 eval { merge([['1']]) };
 like($@, qr/integer/, 'stringified number element rejected');
+
+{
+    local $SIG{__WARN__} = sub { die @_ };
+    eval { merge([[1]], key => sub { 'x' }) };
+    like($@, qr/isn't numeric/, 'non-numeric key warns');
+
+    eval { merge([[1]], key => sub { undef }) };
+    like($@, qr/uninitialized value in subroutine entry/, 'undef key warns');
+}
 
 # test that unusual but acceptable data is accepted
 is_deeply(merge([]), [], 'no lists');
