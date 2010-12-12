@@ -55,16 +55,16 @@ sub merge {
             # TODO choose best implementation based on number of lists, total
             # elements, and requested limit
 
-            _merge_fib_keyed($lists, $limit, $keyer);
+            return _merge_fib_keyed($lists, $limit, $keyer);
         }
         elsif ($MERGE_METHOD == PRIO_LINEAR) {
-            _merge_linear_keyed($lists, $limit, $keyer);
+            return _merge_linear_keyed($lists, $limit, $keyer);
         }
         elsif ($MERGE_METHOD == PRIO_FIB) {
-            _merge_fib_keyed($lists, $limit, $keyer);
+            return _merge_fib_keyed($lists, $limit, $keyer);
         }
         elsif ($MERGE_METHOD == SORT) {
-            _merge_sort_keyed($lists, $limit, $keyer);
+            return _merge_sort_keyed($lists, $limit, $keyer);
         }
         else {
             die "unknown sort method $MERGE_METHOD requested\n";
@@ -75,16 +75,16 @@ sub merge {
             # TODO choose best implementation based on number of lists, total
             # elements, and requested limit
 
-            _merge_fib_flat($lists, $limit);
+            return _merge_fib_flat($lists, $limit);
         }
         elsif ($MERGE_METHOD == PRIO_LINEAR) {
-            _merge_linear_flat($lists, $limit);
+            return _merge_linear_flat($lists, $limit);
         }
         elsif ($MERGE_METHOD == PRIO_FIB) {
-            _merge_fib_flat($lists, $limit);
+            return _merge_fib_flat($lists, $limit);
         }
         elsif ($MERGE_METHOD == SORT) {
-            _merge_sort_flat($lists, $limit);
+            return _merge_sort_flat($lists, $limit);
         }
         else {
             die "unknown sort method $MERGE_METHOD requested\n";
@@ -100,7 +100,7 @@ sub _merge_sort_flat {
     my $limit = shift;
 
     my @output = sort {$a <=> $b} map {@$_} @$lists;
-    splice @output, $limit if defined $limit && @output > $limit;
+    splice @output, $limit if $limit && @output > $limit;
     return \@output;
 }
 
