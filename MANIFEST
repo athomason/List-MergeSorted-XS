@@ -8,6 +8,8 @@ fib.h
 fibpriv.h
 list.c
 list.h
+prio.c
+prio.h
 README
 XS.xs
 t/List-MergeSorted-XS.t

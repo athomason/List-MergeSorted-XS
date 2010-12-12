@@ -18,6 +18,15 @@ our $VERSION = '1.00';
 require XSLoader;
 XSLoader::load('List::MergeSorted::XS', $VERSION);
 
+use List::Util 'sum';
+
+our $MERGE_METHOD;
+use constant {
+    SORT        => 0,
+    PRIO_LINEAR => 1,
+    PRIO_FIB    => 2,
+};
+
 sub merge {
     my $lists = shift;
     my %opts = @_;
@@ -28,74 +37,83 @@ sub merge {
     }
     for my $list (@$lists) {
         unless ($list && ref $list && ref $list eq 'ARRAY') {
-            die "lists to sort must be arrayrefs";
+            die "lists to merge must be arrayrefs";
         }
     }
+
+    my $count = sum(map { scalar @$_ } @$lists);
 
     my $limit = $opts{limit} || 0;
     die "limit must be positive" if defined $limit && $limit < 0;
 
+    return [] unless @$lists;
+
     if (my $keyer = $opts{key}) {
         die "key option must be a callback" unless ref $keyer eq 'CODE';
 
-        # construct a integer-only list-of-lists which will be sorted quickly,
-        # then reassociated with values. because the values are kept in a hash,
-        # the merged elements are not kept in stable order.
+        if (!defined $MERGE_METHOD) {
+            # TODO choose best implementation based on number of lists, total
+            # elements, and requested limit
 
-        my %values;
-        my @list_of_keys;
-        for my $list (@$lists) {
-            my @keys;
-            for my $el (@$list) {
-                my $key = $keyer->($el);
-                next unless defined $key;
-                push @keys, $key;
-                push @{ $values{$key} }, $el;
-            }
-            push @list_of_keys, \@keys;
+            _merge_fib_keyed($lists, $limit, $keyer);
         }
-        my $sorted_keys = _merge_lists_of_numbers(\@list_of_keys, $limit);
-        my @results;
-        for my $key (@$sorted_keys) {
-            push @results, pop @{ $values{$key} };
+        elsif ($MERGE_METHOD == PRIO_LINEAR) {
+            _merge_linear_keyed($lists, $limit, $keyer);
         }
-        return \@results;
+        elsif ($MERGE_METHOD == PRIO_FIB) {
+            _merge_fib_keyed($lists, $limit, $keyer);
+        }
+        elsif ($MERGE_METHOD == SORT) {
+            _merge_sort_keyed($lists, $limit, $keyer);
+        }
+        else {
+            die "unknown sort method $MERGE_METHOD requested\n";
+        }
     }
     else {
-        return _merge_lists_of_numbers($lists, $limit);
+        if (!defined $MERGE_METHOD) {
+            # TODO choose best implementation based on number of lists, total
+            # elements, and requested limit
+
+            _merge_fib_flat($lists, $limit);
+        }
+        elsif ($MERGE_METHOD == PRIO_LINEAR) {
+            _merge_linear_flat($lists, $limit);
+        }
+        elsif ($MERGE_METHOD == PRIO_FIB) {
+            _merge_fib_flat($lists, $limit);
+        }
+        elsif ($MERGE_METHOD == SORT) {
+            _merge_sort_flat($lists, $limit);
+        }
+        else {
+            die "unknown sort method $MERGE_METHOD requested\n";
+        }
     }
 }
 
-sub _merge_lists_of_numbers {
-    # XXX choose implementation based on list size
-    my $lists = $_[0];
-    if (scalar @$lists == 0) {
-        return [];
-    }
+# concatenate all lists and sort the whole thing. works well when no limit is
+# given.
 
-    if (!$ENV{LMSXS_METHOD}) {
-        &_merge_fib;
-    }
-    elsif ($ENV{LMSXS_METHOD} eq 'linear') {
-        &_merge_linear;
-    }
-    elsif ($ENV{LMSXS_METHOD} eq 'fib') {
-        &_merge_fib;
-    }
-    elsif ($ENV{LMSXS_METHOD} eq 'sort') {
-        &_merge_perl_sort;
-    }
-    else {
-        die "unknown sort method $ENV{LMSXS_METHOD} requested\n";
-    }
-}
-
-# concatenate all lists and sort the whole thing
-sub _merge_perl_sort {
+sub _merge_sort_flat {
     my $lists = shift;
     my $limit = shift;
 
     my @output = sort {$a <=> $b} map {@$_} @$lists;
+    splice @output, $limit if $limit;
+    return \@output;
+}
+
+sub _merge_sort_keyed {
+    my ($lists, $limit, $keyer) = @_;
+
+    my @output =
+        map  { $_->[1] }
+        sort { $a->[0] <=> $b->[0] }
+        map  { [$keyer->($_), $_] }
+        map  { @$_ }
+        @$lists;
+
     splice @output, $limit if $limit;
     return \@output;
 }
@@ -121,7 +139,7 @@ List::MergeSorted::XS - Fast merger of sorted lists
 
   # merge complicated objects based on accompanying integer keys
   @lists = ([[1, 'x'], [3, {t => 1}]], [[2, bless {}, 'C'], [4, 5]]);
-  $sorted = merge(\@lists, key => sub { $_->[0] });
+  $sorted = merge(\@lists, key => sub { $_[0][0] });
 
 =head1 DESCRIPTION
 
@@ -137,7 +155,7 @@ those lists.
 Computes the sorted union of a set of lists. The first parameter must be an
 array reference which itself contains a number of array references.
 
-Its behavior may be modified by additional options passed after the list:
+merge's behavior may be modified by additional options passed after the list:
 
 =over 4
 
@@ -151,7 +169,7 @@ returned.
 Specifies a callback routine which will be passed an element of an inner list
 in @_. The routine must return the integer value by which the element will be
 sorted. In effect, the default callback is C<sub {$_[0]}>. This allows more
-complicated structures to be sorted.
+complicated structures to be used.
 
 =back
 
@@ -161,15 +179,33 @@ complicated structures to be sorted.
 
 None by default, C<merge> at request.
 
-=head1 COMPLEXITY
+=head1 ALGORITHMS
 
-Different algorithms are chosen depending on the number of lists.
+The algorithm used to merge the lists is chosen based on the number of lists
+(N), the total number of elements in the lists (M), and the requested limit
+(L).
 
-* For two lists, the complexity is O(m)
+When the limit is on the order of the total element count (L ~ M), perl's
+built-in sort is used on the concatenated lists. The time complexity is
+O(M log M).
 
-* For <XXX lists, the complexity is O(m n)
+Otherwise, a priority queue is used to track the list heads. For small N, this
+is implemented as a linked list kept in sorted order, yielding time complexity
+of O(L N). For large L, a Fibonacci heap is used, for a time complexity of
+O(L log N).
 
-* For >XXX lists, the complexity is O(m log2 n)
+To force a particular implementation, set the package variable $MERGE_METHOD to
+one of these constant:
+
+=over 4
+
+=item * List::MergeSorted::XS::SORT
+
+=item * List::MergeSorted::XS::PRIO_LINEAR
+
+=item * List::MergeSorted::XS::PRIO_FIB
+
+=back
 
 =head1 AUTHOR
 
