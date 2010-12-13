@@ -1,19 +1,21 @@
-List-MergeSorted-XS.spec
 Changes
-Makefile.PL
+List-MergeSorted-XS.spec
 MANIFEST
-ppport.h
+META.yml                                 Module meta-data (added by MakeMaker)
+Makefile.PL
+README
+XS.pm
+XS.xs
+const-c.inc
+const-xs.inc
+fallback/const-c.inc
+fallback/const-xs.inc
 fib.c
 fib.h
 fibpriv.h
 list.c
 list.h
+ppport.h
 prio.c
 prio.h
-README
-XS.xs
 t/List-MergeSorted-XS.t
-fallback/const-c.inc
-fallback/const-xs.inc
-XS.pm
-META.yml                                 Module meta-data (added by MakeMaker)
