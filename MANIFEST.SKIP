@@ -2,3 +2,5 @@ bench.pl
 bench.txt
 gen-XSxs.pl
 .shipit
+.git
+MANIFEST.SKIP
