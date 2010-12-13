@@ -36,10 +36,10 @@ for my $impl (sort keys %impls) {
     my $i = $impls{$impl};
 
     for my $keyed (0, 1) {
-        my $suffix = $keyed ? '_keyed'                : '_flat';
-        my $key    = $keyed ? 'get_el_key(el, keyer)' : 'get_flat_key(el)';
-        my $k1     = $keyed ? ', keyer'               : '';
-        my $k2     = $keyed ? "\n    SV* keyer"       : '';
+        my $suffix = $keyed ? '_keyed'                 : '_flat';
+        my $key    = $keyed ? 'key_from_cv(el, keyer)' : 'key_from_iv(el)';
+        my $k1     = $keyed ? ', keyer'                : '';
+        my $k2     = $keyed ? "\n    SV* keyer"        : '';
 
         print <<END_XS;
 
@@ -110,7 +110,7 @@ __DATA__
 
 static
 inline
-IV get_flat_key(SV* el) {
+IV key_from_iv(SV* el) {
     if (SvIOK(el))
         return SvIV(el);
     else
@@ -120,7 +120,7 @@ IV get_flat_key(SV* el) {
 
 static
 inline
-IV get_el_key(SV* el, SV* keyer)
+IV key_from_cv(SV* el, SV* keyer)
 {
     int ret;
 

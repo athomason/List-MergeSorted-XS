@@ -12,7 +12,7 @@
 
 static
 inline
-IV get_flat_key(SV* el) {
+IV key_from_iv(SV* el) {
     if (SvIOK(el))
         return SvIV(el);
     else
@@ -22,7 +22,7 @@ IV get_flat_key(SV* el) {
 
 static
 inline
-IV get_el_key(SV* el, SV* keyer)
+IV key_from_cv(SV* el, SV* keyer)
 {
     int ret;
 
@@ -65,7 +65,7 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = get_flat_key(el);
+        IV key = key_from_iv(el);
 
         lmsxs_prio_ent* ent = lmsxs_make_ent(el, n, 0);
         fh_insertkey(heap, key, ent);
@@ -79,7 +79,7 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = get_flat_key(el);
+            IV key = key_from_iv(el);
             ent->sv = el;
             
             fh_insertkey(heap, key, ent);
@@ -116,7 +116,7 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = get_el_key(el, keyer);
+        IV key = key_from_cv(el, keyer);
 
         lmsxs_prio_ent* ent = lmsxs_make_ent(el, n, 0);
         fh_insertkey(heap, key, ent);
@@ -130,7 +130,7 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = get_el_key(el, keyer);
+            IV key = key_from_cv(el, keyer);
             ent->sv = el;
             
             fh_insertkey(heap, key, ent);
@@ -166,7 +166,7 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = get_flat_key(el);
+        IV key = key_from_iv(el);
 
         lmsxs_ll_ent* ent = lmsxs_ll_make_ent(key, el, n, 0);
         lmsxs_ll_insert_ent(&heads, ent);
@@ -180,7 +180,7 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = get_flat_key(el);
+            IV key = key_from_iv(el);
             ent->sv = el;
             ent->key = key;
             lmsxs_ll_insert_ent(&heads, ent);
@@ -216,7 +216,7 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = get_el_key(el, keyer);
+        IV key = key_from_cv(el, keyer);
 
         lmsxs_ll_ent* ent = lmsxs_ll_make_ent(key, el, n, 0);
         lmsxs_ll_insert_ent(&heads, ent);
@@ -230,7 +230,7 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = get_el_key(el, keyer);
+            IV key = key_from_cv(el, keyer);
             ent->sv = el;
             ent->key = key;
             lmsxs_ll_insert_ent(&heads, ent);
