@@ -67,9 +67,7 @@ for my $method (sort keys %methods) {
     my @lists = ([4, 7, 9], [1, 3, 5], [2, 6, 8]);
 
     my $merged = merge(\@lists);
-    use YAML::Syck;
-    is_deeply($merged, [1..9], "$method: unlimited flat") || # $sorted = [1..9]
-    print Dump(\@lists, $merged);
+    is_deeply($merged, [1..9], "$method: unlimited flat"); # $sorted = [1..9]
 
     $merged = merge(\@lists, limit => 4);
     is_deeply($merged, [1..4], "$method: limited flat");
