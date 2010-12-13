@@ -3,7 +3,7 @@
 
 #########################
 
-use Test::More tests => 56;
+use Test::More tests => 70;
 use_ok('List::MergeSorted::XS');
 
 #########################
@@ -55,6 +55,7 @@ srand(999); # use random but reproducible data sets
 
 # make sure to exercise all the codepaths
 my %methods = (
+    auto    => undef,
     fib     => List::MergeSorted::XS::PRIO_FIB,
     linear  => List::MergeSorted::XS::PRIO_LINEAR,
     sort    => List::MergeSorted::XS::SORT,
