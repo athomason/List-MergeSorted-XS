@@ -18,7 +18,7 @@ our $VERSION = '1.00';
 require XSLoader;
 XSLoader::load('List::MergeSorted::XS', $VERSION);
 
-use List::Util 'sum';
+use List::Util qw( min sum );
 
 our $MERGE_METHOD;
 use constant {
@@ -41,8 +41,6 @@ sub merge {
         }
     }
 
-    my $count = sum(map { scalar @$_ } @$lists);
-
     my $limit = $opts{limit} || 0;
     die "limit must be positive" if defined $limit && $limit < 0;
 
@@ -52,10 +50,14 @@ sub merge {
         die "key option must be a callback" unless ref $keyer eq 'CODE';
 
         if (!defined $MERGE_METHOD) {
-            # TODO choose best implementation based on number of lists, total
-            # elements, and requested limit
 
-            return _merge_fib_keyed($lists, $limit, $keyer);
+            # linear priority queue is faster until ~100 lists, relatively
+            # independent of limit %. sort never wins in keyed mode because of
+            # Schwartzian tx overhead
+
+            return scalar @$lists < 100
+                ? _merge_linear_keyed($lists, $limit, $keyer)
+                : _merge_fib_keyed($lists, $limit, $keyer);
         }
         elsif ($MERGE_METHOD == PRIO_LINEAR) {
             return _merge_linear_keyed($lists, $limit, $keyer);
@@ -72,10 +74,37 @@ sub merge {
     }
     else {
         if (!defined $MERGE_METHOD) {
-            # TODO choose best implementation based on number of lists, total
-            # elements, and requested limit
 
-            return _merge_fib_flat($lists, $limit);
+            # linear always wins with a small number of lists (<100). with more
+            # lists, fib wins with low limit, giving way to sort around 25%
+            # limit.
+
+            # compute what fraction of the merged set will be returned
+            my $limit_frac = 1;
+            if ($limit) {
+                $limit_frac = min(1, $limit / sum(map { scalar @$_ } @$lists));
+            }
+
+            if ($limit_frac < 0.05) {
+                return scalar @$lists < 1000
+                    ? _merge_linear_flat($lists, $limit)
+                    : _merge_fib_flat($lists, $limit);
+            }
+            elsif ($limit_frac < 0.25) {
+                return scalar @$lists < 500
+                    ? _merge_linear_flat($lists, $limit)
+                    : _merge_fib_flat($lists, $limit);
+            }
+            elsif ($limit_frac < 0.75) {
+                return scalar @$lists < 100
+                    ? _merge_linear_flat($lists, $limit)
+                    : _merge_sort_flat($lists, $limit);
+            }
+            else {
+                return scalar @$lists < 100
+                    ? _merge_linear_flat($lists, $limit)
+                    : _merge_sort_flat($lists, $limit);
+            }
         }
         elsif ($MERGE_METHOD == PRIO_LINEAR) {
             return _merge_linear_flat($lists, $limit);
@@ -107,6 +136,10 @@ sub _merge_sort_flat {
 sub _merge_sort_keyed {
     my ($lists, $limit, $keyer) = @_;
 
+    # Schwartzian transform is faster than sorting on
+    # {$keyer->($a) <=> # $keyer->($b)}, even for degenerately simple case
+    # of $keyer = sub { $_[0] }
+
     my @output =
         map  { $_->[1] }
         sort { $a->[0] <=> $b->[0] }
@@ -123,7 +156,7 @@ __END__
 
 =head1 NAME
 
-List::MergeSorted::XS - Fast merger of sorted lists
+List::MergeSorted::XS - Fast merger of presorted lists
 
 =head1 SYNOPSIS
 
@@ -138,7 +171,12 @@ List::MergeSorted::XS - Fast merger of sorted lists
   $first = merge(\@lists, limit => 4); # $first = [1..4]
 
   # merge complicated objects based on accompanying integer keys
-  @lists = ([[1, 'x'], [3, {t => 1}]], [[2, bless {}, 'C'], [4, 5]]);
+  @lists = ([
+              [1 => 'x'], [3 => {t => 1}]
+            ],
+            [
+              [2 => bless {}, 'C'], [4 => 5]
+            ]);
   $sorted = merge(\@lists, key => sub { $_[0][0] });
 
 =head1 DESCRIPTION
@@ -146,14 +184,29 @@ List::MergeSorted::XS - Fast merger of sorted lists
 This module takes a set of presorted lists and returns the sorted union of
 those lists.
 
+To maximize speed, an appropriate algorithm is chosen heuristically based on
+the size of the input data and efficient C implementations of the algorithms
+are used.
+
 =head1 FUNCTIONS
 
 =over 4
 
 =item merge(\@list_of_lists, %opts)
 
-Computes the sorted union of a set of lists. The first parameter must be an
-array reference which itself contains a number of array references.
+Computes the sorted union of a set of lists of integers. The first parameter
+must be an array reference which itself contains a number of array references.
+
+The constituent lists must meet these preconditions for correct behavior:
+
+=over 4
+
+=item * each element of each list is an integer (or an integer may be computed
+        from the element using the C<keyer> parameter below)
+
+=item * each list is pre-sorted in ascending order
+
+=back
 
 merge's behavior may be modified by additional options passed after the list:
 
@@ -167,9 +220,9 @@ returned.
 =item * key
 
 Specifies a callback routine which will be passed an element of an inner list
-in @_. The routine must return the integer value by which the element will be
+through @_. The routine must return the integer value by which the element will be
 sorted. In effect, the default callback is C<sub {$_[0]}>. This allows more
-complicated structures to be used.
+complicated structures to be merged.
 
 =back
 
@@ -179,23 +232,28 @@ complicated structures to be used.
 
 None by default, C<merge> at request.
 
-=head1 ALGORITHMS
+=head1 ALGORITHM
 
-The algorithm used to merge the lists is chosen based on the number of lists
-(N), the total number of elements in the lists (M), and the requested limit
-(L).
+The algorithm used to merge the lists is heurisitcally chosen based on the
+number of lists (N), the total number of elements in the lists (M), and the
+requested limit (L). (The heuristic constants were determined by analysis of
+benchmarks on a 2.5GHz Intel Xeon where all data fit in memory.)
 
-When the limit is on the order of the total element count (L ~ M), perl's
-built-in sort is used on the concatenated lists. The time complexity is
-O(M log M).
+When there are many lists and the element limit is a significant fraction of
+the total element count (L/M > 1/4), perl's built-in C<sort> is used to order
+the concatenated lists. The time complexity is C<O(M log M)>. Since this method
+always processes the full list it cannot short-circuit in the highly-limited
+case, as do the priority queue methods.
 
-Otherwise, a priority queue is used to track the list heads. For small N, this
-is implemented as a linked list kept in sorted order, yielding time complexity
-of O(L N). For large L, a Fibonacci heap is used, for a time complexity of
-O(L log N).
+When L is a smaller fraction of M, a priority queue is used to track the list
+heads. For small N, this is implemented as a linked list kept in sorted order
+(using linear-time insertion), yielding time complexity of C<O(L N)>. For large
+N, a Fibonacci heap is used, for a time complexity of C<O(L log N)>. The linked
+list has less bookkeeping overhead than the heap, so it is more efficient for
+fewer lists.
 
 To force a particular implementation, set the package variable $MERGE_METHOD to
-one of these constant:
+one of these constants:
 
 =over 4
 
@@ -206,6 +264,10 @@ one of these constant:
 =item * List::MergeSorted::XS::PRIO_FIB
 
 =back
+
+=head1 TODO
+
+* Allow modification of the heuristics based on local benchmarks.
 
 =head1 AUTHOR
 
