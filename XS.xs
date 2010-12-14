@@ -49,6 +49,22 @@ PROTOTYPES: ENABLE
 
 INCLUDE: const-xs.inc
 
+IV
+l_ms_xs_count_elements(p_lists)
+  SV* p_lists
+CODE:
+    AV* lists = (AV*) SvRV(p_lists);
+    IV numlists = av_len(lists) + 1;
+    int n;
+    RETVAL = numlists;
+
+    for (n = 0; n < numlists; n++) {
+        AV* list = (AV*) SvRV(*av_fetch(lists, n, 0));
+        RETVAL += av_len(list);
+    }
+OUTPUT:
+    RETVAL
+
 SV*
 l_ms_xs_merge_fib_flat_dupeok(p_lists, limit)
   SV* p_lists

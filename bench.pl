@@ -24,13 +24,14 @@ my %overall_timings;
 
 srand 999;
 
+OUTER:
 for my $keyed (0, 1) {
     for my $limit_percent (@limits) {
         for my $num_lists (@num_lists) {
             my $list_size = $const_total_elems ? max(int($elements / $num_lists), 1) : $elements;
 
             my %opts;
-            $opts{key} = sub { $_[0][0] } if $keyed;
+            $opts{key_cb} = sub { $_[0][0] } if $keyed;
             $opts{limit} = max(1, int($limit_percent / 100 * $num_lists * $list_size)) if $limit_percent;
 
             warn sprintf "keyed = %s; # lists = %d; list size = %d; limit = %s\n",
@@ -53,9 +54,8 @@ for my $keyed (0, 1) {
                 local $List::MergeSorted::XS::MERGE_METHOD = $methods{$method};
                 my $bench = timethis($time_count, sub { merge(\@lists, %opts) }, $method);
                 $overall_timings{$keyed}{$limit_percent}{$method}{$num_lists} = $bench->[5] / $bench->[1]; # iterations over user time
-                last if $quit;
+                last OUTER if $quit;
             }
-            last if $quit;
         }
     }
 }

@@ -13,12 +13,10 @@ our @ISA = qw(Exporter);
 our @EXPORT_OK = qw/merge/;
 our @EXPORT = qw();
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
 require XSLoader;
 XSLoader::load('List::MergeSorted::XS', $VERSION);
-
-use List::Util qw( min sum );
 
 our $MERGE_METHOD;
 use constant {
@@ -74,25 +72,23 @@ sub merge {
         # limit.
 
         # compute what fraction of the merged set will be returned
-        my $limit_frac = 1;
-        if ($limit) {
-            $limit_frac = min(1, $limit / sum(map { scalar @$_ } @$lists));
-        }
+        my $total = _count_elements($lists);
+        $limit ||= $total;
 
-        if ($limit_frac < 0.05) {
+        if ($limit < 0.05 * $total) {
             return scalar @$lists < 1000
                 ? _merge(PRIO_LINEAR, @params)
-                : _merge_fib(@params);
+                : _merge(PRIO_FIB, @params);
         }
-        elsif ($limit_frac < 0.25) {
+        elsif ($limit < 0.25 * $total) {
             return scalar @$lists < 500
                 ? _merge(PRIO_LINEAR, @params)
-                : _merge_fib(@params)
+                : _merge(PRIO_FIB, @params)
         }
-        elsif ($limit_frac < 0.75) {
+        elsif ($limit < 0.75 * $total) {
             return scalar @$lists < 100
                 ? _merge(PRIO_LINEAR, @params)
-                : _merge_sort(@params)
+                : _merge(SORT, @params)
         }
         else {
             return scalar @$lists < 100
