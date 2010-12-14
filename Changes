@@ -1,5 +1,7 @@
 Revision history for Perl extension List::MergeSorted::XS
 
+1.03  Tue Dec 14 13:23:24 PST 2010
+    - fix incorrectly spelled instances of uniq_cb
 1.02  Tue Dec 14 11:25:46 PST 2010
     - fix mis-merged code in _merge
     - speed up auto codepath by counting elements in XS and not using division

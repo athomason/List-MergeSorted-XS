@@ -82,11 +82,11 @@ for my $method (sort keys %methods) {
     is_deeply($merged, [$lists[0][0], $lists[1][0], $lists[0][1]], "$method: limited keyed");
 
     @lists = ([1, 2], [0, 2, 3], [3, 4]);
-    $merged = merge(\@lists, unique_cb => sub { $_[0] });
+    $merged = merge(\@lists, uniq_cb => sub { $_[0] });
     is_deeply($merged, [0..4], "$method: unkeyed deduplicate");
 
     @lists = ([ [0,  99], [0, 100], [0, 100], [1, 101] ]);
-    $merged = merge(\@lists, key_cb => sub { $_[0][0] }, unique_cb => sub { $_[0][1] });
+    $merged = merge(\@lists, key_cb => sub { $_[0][0] }, uniq_cb => sub { $_[0][1] });
     is_deeply($merged, [@{ $lists[0] }[ 0, 1, 3 ]], "$method: keyed deduplicate");
 
     # test that larger lists are handled correctly

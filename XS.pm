@@ -13,7 +13,7 @@ our @ISA = qw(Exporter);
 our @EXPORT_OK = qw/merge/;
 our @EXPORT = qw();
 
-our $VERSION = '1.02';
+our $VERSION = '1.03';
 
 require XSLoader;
 XSLoader::load('List::MergeSorted::XS', $VERSION);
@@ -51,7 +51,7 @@ sub merge {
     return [] unless @$lists;
 
     # pick an algorithm
-    my @params = ($lists, $limit, $opts{key_cb}, $opts{unique_cb});
+    my @params = ($lists, $limit, $opts{key_cb}, $opts{uniq_cb});
 
     if (defined $MERGE_METHOD) {
         return _merge($MERGE_METHOD, @params);
@@ -214,7 +214,7 @@ List::MergeSorted::XS - Fast merger of presorted lists
 
   # remove duplicates
   @lists = ([1, 2], [0, 2, 3], [3, 4]);
-  merge(\@lists, unique_cb => sub { $_[0] }); # [0..4]
+  merge(\@lists, uniq_cb => sub { $_[0] }); # [0..4]
 
   # merge complicated objects based on accompanying integer keys
   @lists = ([

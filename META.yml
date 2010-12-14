@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                List-MergeSorted-XS
-version:             1.02
+version:             1.03
 abstract:            Fast sorted list merger
 license:             ~
 generated_by:        ExtUtils::MakeMaker version 6.36
