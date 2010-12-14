@@ -1,4 +1,4 @@
-List-MergeSorted-XS 1.00
+List-MergeSorted-XS 1.01
 ========================
 
 This module takes a set of presorted lists and returns the sorted union of

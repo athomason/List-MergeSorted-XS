@@ -5,55 +5,70 @@
 use strict;
 use warnings;
 
-my %impls = (
-    linear => {
-        init    => 'lmsxs_ll_ent* heads = NULL;',
-        insert  => 'lmsxs_ll_insert_ent(&heads, ent);',
-        update  => 'ent->key = key;',
-        pop     => 'lmsxs_ll_pop_ent(&heads)',
-        more    => 'heads',
-        destroy => '',
-        alloc   => 'lmsxs_ll_make_ent(key, el, n, 0)',
-        free    => 'lmsxs_ll_free_ent',
-        type    => 'lmsxs_ll_ent',
-    },
-    fib => {
-        init    => 'struct fibheap* heap = fh_makekeyheap();',
-        insert  => 'fh_insertkey(heap, key, ent);',
-        update  => '',
-        pop     => '(lmsxs_prio_ent*) fh_extractmin(heap)',
-        more    => '!fh_empty(heap)',
-        destroy => "\n    fh_deleteheap(heap);",
-        alloc   => 'lmsxs_make_ent(el, n, 0)',
-        free    => 'lmsxs_free_ent',
-        type    => 'lmsxs_prio_ent',
-    },
-);
+use Template;
 
 print <DATA>;
 
+my %impls = (
+    linear => {
+        type    => 'lmsxs_ll_ent',
+        insert  => 'lmsxs_ll_insert_ent(&heads, ent);',
+        pop     => 'lmsxs_ll_pop_ent(&heads)',
+        alloc   => 'lmsxs_ll_make_ent(key, el, n, 0)',
+        free    => 'lmsxs_ll_free_ent',
+        more    => 'heads',
+    },
+    fib => {
+        type    => 'lmsxs_prio_ent',
+        insert  => 'fh_insertkey(heads, key, ent);',
+        pop     => '(lmsxs_prio_ent*) fh_extractmin(heads)',
+        alloc   => 'lmsxs_make_ent(el, n, 0)',
+        free    => 'lmsxs_free_ent',
+        more    => '!fh_empty(heads)',
+    },
+);
+
 for my $impl (sort keys %impls) {
-    my $i = $impls{$impl};
-
     for my $keyed (0, 1) {
-        my $suffix = $keyed ? '_keyed'                 : '_flat';
-        my $key    = $keyed ? 'key_from_cv(el, keyer)' : 'key_from_iv(el)';
-        my $k1     = $keyed ? ', keyer'                : '';
-        my $k2     = $keyed ? "\n    SV* keyer"        : '';
+        for my $dedupe (0, 1) {
+            my %vars = (
+                %{ $impls{$impl} },
+                impl   => $impl,
+                keyed  => $keyed,
+                dedupe => $dedupe,
+            );
 
-        print <<END_XS;
+            $vars{name} = "l_ms_xs_merge_";
+            $vars{name} .= $impl;
+            $vars{name} .= $keyed ? '_keyed' : '_flat';
+            $vars{name} .= $dedupe ? '_dedupe' : '_dupeok';
+
+            my @params = qw( p_lists limit );
+            push @params, 'keyer' if $keyed;
+            push @params, 'uniquer' if $dedupe;
+            $vars{params} = join ', ', @params;
+
+            $vars{key} = $keyed ? 'callback_value(el, keyer)' : 'key_from_iv(el)';
+
+            my $template_text = <<END_XS;
 
 SV*
-l_ms_xs_merge_$impl$suffix(p_lists, limit$k1)
-    SV* p_lists
-    IV limit$k2
+[% name %]([% params %])
+  SV* p_lists
+  IV limit
+  [% IF keyed %]SV* keyer[% END %]
+  [% IF dedupe %]SV* uniquer[% END %]
 CODE:
     AV* lists = (AV*) SvRV(p_lists);
     AV* results = (AV*) sv_2mortal((SV*) newAV());
     IV numlists = av_len(lists) + 1;
     int n;
 
-    $i->{init}
+    [% IF impl == "linear" %]
+    lmsxs_ll_ent* heads = NULL;
+    [% ELSIF impl == "fib" %]
+    struct fibheap* heads = fh_makekeyheap();
+    [% END %]
 
     for (n = 0; n < numlists; n++) {
         AV* list = (AV*) SvRV(*av_fetch(lists, n, 0));
@@ -61,37 +76,59 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = $key;
+        IV key = [% key %];
 
-        $i->{type}* ent = $i->{alloc};
-        $i->{insert}
+        [% type %]* ent = [% alloc %];
+        [% insert %];
     }
 
-    for (n = 0; $i->{more} && (!limit || n < limit); n++) {
+    [% IF dedupe %]IV last_unique;[% END %]
+    for (n = 0; [% more %] && (!limit || n < limit); ) {
         AV* list;
-        $i->{type}* ent = $i->{pop};
+        [% type %]* ent = [% pop %];
+
+        [% IF dedupe %]
+        IV unique = callback_value(ent->sv, uniquer);
+        if (!n || unique != last_unique) {
+            av_push(results, newSVsv(ent->sv));
+            n++;
+            last_unique = unique;
+        }
+        [% ELSE %]
         av_push(results, newSVsv(ent->sv));
+        n++;
+        [% END %]
 
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = $key;
+            IV key = [% key %];
             ent->sv = el;
-            $i->{update}
-            $i->{insert}
+            [% IF impl == 'linear' %]ent->key = key;[% END %]
+            [% insert %]
         }
         else {
-            $i->{free}(ent);
+            [% free %](ent);
         }
     }
 
-    while ($i->{more})
-        $i->{free}($i->{pop});$i->{destroy}
+    while ([% more %])
+        [% free %]([% pop %]);
+    [% IF impl == "fib" %]fh_deleteheap(heads);[% END %]
 
     RETVAL = newRV((SV*) results);
 OUTPUT:
     RETVAL
 END_XS
+
+            my Template $tt = Template->new or die "Couldn't instantiate template: $Template::ERROR";
+            my $output;
+            $tt->process(\$template_text, \%vars, \$output) or die $tt->error();
+
+            $output =~ s/\n^ +$//mg; # strip whitespace-only lines introduced by TT
+
+            print $output;
+        }
     }
 }
 
@@ -120,7 +157,7 @@ IV key_from_iv(SV* el) {
 
 static
 inline
-IV key_from_cv(SV* el, SV* keyer)
+IV callback_value(SV* el, SV* callback)
 {
     int ret;
 
@@ -129,7 +166,7 @@ IV key_from_cv(SV* el, SV* keyer)
     XPUSHs(el);
     PUTBACK;
 
-    ret = call_sv(keyer, G_SCALAR);
+    ret = call_sv(callback, G_SCALAR);
     SPAGAIN;
 
     if (!ret)
@@ -137,6 +174,8 @@ IV key_from_cv(SV* el, SV* keyer)
 
     IV value = POPi;
     PUTBACK;
+
+    return value;
 }
 
 MODULE = List::MergeSorted::XS  PACKAGE = List::MergeSorted::XS  PREFIX = l_ms_xs

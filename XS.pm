@@ -13,7 +13,7 @@ our @ISA = qw(Exporter);
 our @EXPORT_OK = qw/merge/;
 our @EXPORT = qw();
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 
 require XSLoader;
 XSLoader::load('List::MergeSorted::XS', $VERSION);
@@ -22,16 +22,16 @@ use List::Util qw( min sum );
 
 our $MERGE_METHOD;
 use constant {
-    SORT        => 0,
-    PRIO_LINEAR => 1,
-    PRIO_FIB    => 2,
+    PRIO_LINEAR => 0,
+    PRIO_FIB    => 1,
+    SORT        => 2,
 };
 
 sub merge {
     my $lists = shift;
     my %opts = @_;
 
-    # make sure input is sane
+    # validate inputs
     unless ($lists && ref $lists && ref $lists eq 'ARRAY') {
         die "merge requires an array reference";
     }
@@ -44,96 +44,103 @@ sub merge {
     my $limit = $opts{limit} || 0;
     die "limit must be positive" if defined $limit && $limit < 0;
 
+    die "key_cb option must be a coderef"
+        if $opts{key_cb} && ref $opts{key_cb} ne 'CODE';
+
+    die "uniq_cb option must be a coderef"
+        if $opts{uniq_cb} && ref $opts{uniq_cb} ne 'CODE';
+
     return [] unless @$lists;
 
-    if (my $keyer = $opts{key}) {
-        die "key option must be a callback" unless ref $keyer eq 'CODE';
+    # pick an algorithm
+    my @params = ($lists, $limit, $opts{key_cb}, $opts{unique_cb});
 
-        if (!defined $MERGE_METHOD) {
+    if (defined $MERGE_METHOD) {
+        return _merge($MERGE_METHOD, @params);
+    }
 
-            # linear priority queue is faster until ~100 lists, relatively
-            # independent of limit %. sort never wins in keyed mode because of
-            # Schwartzian tx overhead
+    if ($opts{key_cb}) {
+        # linear priority queue is faster until ~100 lists, relatively
+        # independent of limit %. sort never wins in keyed mode because of
+        # Schwartzian tx overhead
 
-            return scalar @$lists < 100
-                ? _merge_linear_keyed($lists, $limit, $keyer)
-                : _merge_fib_keyed($lists, $limit, $keyer);
-        }
-        elsif ($MERGE_METHOD == PRIO_LINEAR) {
-            return _merge_linear_keyed($lists, $limit, $keyer);
-        }
-        elsif ($MERGE_METHOD == PRIO_FIB) {
-            return _merge_fib_keyed($lists, $limit, $keyer);
-        }
-        elsif ($MERGE_METHOD == SORT) {
-            return _merge_sort_keyed($lists, $limit, $keyer);
-        }
-        else {
-            die "unknown sort method $MERGE_METHOD requested\n";
-        }
+        return scalar @$lists < 100
+            ? _merge(PRIO_LINEAR, @params)
+            : _merge(PRIO_FIB, @params);
     }
     else {
-        if (!defined $MERGE_METHOD) {
+        # linear always wins with a small number of lists (<100). with more
+        # lists, fib wins with low limit, giving way to sort around 25%
+        # limit.
 
-            # linear always wins with a small number of lists (<100). with more
-            # lists, fib wins with low limit, giving way to sort around 25%
-            # limit.
+        # compute what fraction of the merged set will be returned
+        my $limit_frac = 1;
+        if ($limit) {
+            $limit_frac = min(1, $limit / sum(map { scalar @$_ } @$lists));
+        }
 
-            # compute what fraction of the merged set will be returned
-            my $limit_frac = 1;
-            if ($limit) {
-                $limit_frac = min(1, $limit / sum(map { scalar @$_ } @$lists));
-            }
-
-            if ($limit_frac < 0.05) {
-                return scalar @$lists < 1000
-                    ? _merge_linear_flat($lists, $limit)
-                    : _merge_fib_flat($lists, $limit);
-            }
-            elsif ($limit_frac < 0.25) {
-                return scalar @$lists < 500
-                    ? _merge_linear_flat($lists, $limit)
-                    : _merge_fib_flat($lists, $limit);
-            }
-            elsif ($limit_frac < 0.75) {
-                return scalar @$lists < 100
-                    ? _merge_linear_flat($lists, $limit)
-                    : _merge_sort_flat($lists, $limit);
-            }
-            else {
-                return scalar @$lists < 100
-                    ? _merge_linear_flat($lists, $limit)
-                    : _merge_sort_flat($lists, $limit);
-            }
+        if ($limit_frac < 0.05) {
+            return scalar @$lists < 1000
+                ? _merge(PRIO_LINEAR, @params)
+                : _merge_fib(@params);
         }
-        elsif ($MERGE_METHOD == PRIO_LINEAR) {
-            return _merge_linear_flat($lists, $limit);
+        elsif ($limit_frac < 0.25) {
+            return scalar @$lists < 500
+                ? _merge(PRIO_LINEAR, @params)
+                : _merge_fib(@params)
         }
-        elsif ($MERGE_METHOD == PRIO_FIB) {
-            return _merge_fib_flat($lists, $limit);
-        }
-        elsif ($MERGE_METHOD == SORT) {
-            return _merge_sort_flat($lists, $limit);
+        elsif ($limit_frac < 0.75) {
+            return scalar @$lists < 100
+                ? _merge(PRIO_LINEAR, @params)
+                : _merge_sort(@params)
         }
         else {
-            die "unknown sort method $MERGE_METHOD requested\n";
+            return scalar @$lists < 100
+                ? _merge(PRIO_LINEAR, @params)
+                : _merge(SORT, @params)
         }
+    }
+}
+
+# dispatch to appopriate implementation based on algorithm and options
+sub _merge {
+    my ($method, $lists, $limit, $key_cb, $uniq_cb) = @_;
+
+    if ($method == PRIO_LINEAR) {
+        return $key_cb ? $uniq_cb ? _merge_linear_keyed_dedupe($lists, $limit, $key_cb, $uniq_cb)
+                                  : _merge_linear_keyed_dupeok($lists, $limit, $key_cb)
+                       : $uniq_cb ? _merge_linear_flat_dedupe($lists, $limit, $uniq_cb)
+                                  : _merge_linear_flat_dupeok($lists, $limit);
+    }
+    elsif ($method == PRIO_FIB) {
+        return $key_cb ? $uniq_cb ? _merge_fib_keyed_dedupe($lists, $limit, $key_cb, $uniq_cb)
+                                  : _merge_fib_keyed_dupeok($lists, $limit, $key_cb)
+                       : $uniq_cb ? _merge_fib_flat_dedupe($lists, $limit, $uniq_cb)
+                                  : _merge_fib_flat_dupeok($lists, $limit);
+    }
+    elsif ($method == SORT) {
+        return $key_cb ? $uniq_cb ? _merge_sort_keyed_dedupe($lists, $limit, $key_cb, $uniq_cb)
+                                  : _merge_sort_keyed_dupeok($lists, $limit, $key_cb)
+                       : $uniq_cb ? _merge_sort_flat_dedupe($lists, $limit, $uniq_cb)
+                                  : _merge_sort_flat_dupeok($lists, $limit);
+    }
+    else {
+        die "unknown sort method $MERGE_METHOD requested\n";
     }
 }
 
 # concatenate all lists and sort the whole thing. works well when no limit is
 # given.
 
-sub _merge_sort_flat {
-    my $lists = shift;
-    my $limit = shift;
+sub _merge_sort_flat_dupeok {
+    my ($lists, $limit) = @_;
 
     my @output = sort {$a <=> $b} map {@$_} @$lists;
     splice @output, $limit if $limit && @output > $limit;
     return \@output;
 }
 
-sub _merge_sort_keyed {
+sub _merge_sort_keyed_dupeok {
     my ($lists, $limit, $keyer) = @_;
 
     # Schwartzian transform is faster than sorting on
@@ -151,6 +158,46 @@ sub _merge_sort_keyed {
     return \@output;
 }
 
+sub _merge_sort_flat_dedupe {
+    my ($lists, $limit, $uniquer) = @_;
+
+    my @merged = sort {$a <=> $b} map {@$_} @$lists;
+
+    my @output;
+    my $last_unique = undef;
+    for my $element (@merged) {
+        my $unique = $uniquer->($element);
+        next if defined $last_unique && $unique == $last_unique;
+        push @output, $element;
+        $last_unique = $unique;
+    }
+    splice @output, $limit if $limit && @output > $limit;
+    return \@output;
+}
+
+sub _merge_sort_keyed_dedupe {
+    my ($lists, $limit, $keyer, $uniquer) = @_;
+
+    my @merged =
+        map  { $_->[1] }
+        sort { $a->[0] <=> $b->[0] }
+        map  { [$keyer->($_), $_] }
+        map  { @$_ }
+        @$lists;
+
+    my @output;
+    my $last_unique = undef;
+    for my $element (@merged) {
+        my $unique = $uniquer->($element);
+        next if defined $last_unique && $unique == $last_unique;
+        push @output, $element;
+        $last_unique = $unique;
+    }
+
+    splice @output, $limit if $limit && @output > $limit;
+    return \@output;
+}
+
 1;
 __END__
 
@@ -162,13 +209,16 @@ List::MergeSorted::XS - Fast merger of presorted lists
 
   use List::MergeSorted::XS 'merge';
 
-  @lists = ([1, 3, 5], [2, 6, 8], [4, 7, 9]);
-
   # merge plain integer lists
-  $sorted = merge(\@lists); # $sorted = [1..9]
+  @lists = ([1, 3, 5], [2, 6, 8], [4, 7, 9]);
+  merge(\@lists); # [1..9]
 
-  # return only some
-  $first = merge(\@lists, limit => 4); # $first = [1..4]
+  # return only beginning of union
+  merge(\@lists, limit => 4); # [1..4]
+
+  # remove duplicates
+  @lists = ([1, 2], [0, 2, 3], [3, 4]);
+  merge(\@lists, unique_cb => sub { $_[0] }); # [0..4]
 
   # merge complicated objects based on accompanying integer keys
   @lists = ([
@@ -185,48 +235,64 @@ This module takes a set of presorted lists and returns the sorted union of
 those lists.
 
 To maximize speed, an appropriate algorithm is chosen heuristically based on
-the size of the input data and efficient C implementations of the algorithms
-are used.
+the size of the input data; additionally, efficient C implementations of the
+algorithms are used.
 
 =head1 FUNCTIONS
 
 =over 4
 
-=item merge(\@list_of_lists, %opts)
+=item $merged = merge(\@list_of_lists, %opts)
 
 Computes the sorted union of a set of lists of integers. The first parameter
 must be an array reference which itself contains a number of array references.
+The result set is returned in an array reference.
 
 The constituent lists must meet these preconditions for correct behavior:
 
 =over 4
 
-=item * each element of each list is an integer (or an integer may be computed
-        from the element using the C<keyer> parameter below)
+=item * either each element of each list is an integer or an integer may be
+        computed from the element using the C<keyer> parameter below
 
 =item * each list is pre-sorted in ascending order
 
 =back
 
-merge's behavior may be modified by additional options passed after the list:
+C<merge>'s behavior may be modified by additional options passed after the list:
 
 =over 4
 
 =item * limit
 
-Specifies a maximum number of items to return. By default all items are
+Specifies a maximum number of elements to return. By default all elements are
 returned.
 
-=item * key
+=item * key_cb
 
 Specifies a callback routine which will be passed an element of an inner list
 through @_. The routine must return the integer value by which the element will be
 sorted. In effect, the default callback is C<sub {$_[0]}>. This allows more
 complicated structures to be merged.
 
+=item * uniq_cb
+
+Specifies a callback routine which will be passed an element of an inner list
+through @_. The routine must return the integer value which identifies the
+element in some sense. Elements with the same identity value will not be
+duplicated in the output. Elements with the same identity must also have the
+same key.
+
+If no uniq_cb is passed, duplicates are allowed in the output.
+
 =back
 
 =back
+
+=head1 NOTES
+
+Only ascending order is supported. To merge lists which sorted in descending
+order, use C<key_cb => sub { -$_[0] }>.
 
 =head1 EXPORT
 
@@ -266,6 +332,10 @@ one of these constants:
 =back
 
 =head1 TODO
+
+* Support comparitive orderings, where no mapping from elements to integers
+exists but a well-defined ordering exists for which a comparison callback
+callback can be provided.
 
 * Allow modification of the heuristics based on local benchmarks.
 
