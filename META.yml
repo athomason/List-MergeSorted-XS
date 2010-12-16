@@ -11,3 +11,5 @@ meta-spec:
     version: 1.2
 author:
     - Adam Thomason <athomason@cpan.org>
+resources:
+    repository: git://github.com/athomason/List-MergeSorted-XS.git
