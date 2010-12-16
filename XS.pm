@@ -288,9 +288,9 @@ If no uniq_cb is passed, duplicates are allowed in the output.
 =head1 NOTES
 
 Only ascending order is supported. To merge lists which sorted in descending
-order, use C<key_cb => sub { -$_[0] }>.
+order, use C<< key_cb => sub { -$_[0] } >>.
 
-=head1 EXPORT
+=head1 EXPORTS
 
 None by default, C<merge> at request.
 
@@ -314,8 +314,8 @@ N, a Fibonacci heap is used, for a time complexity of C<O(L log N)>. The linked
 list has less bookkeeping overhead than the heap, so it is more efficient for
 fewer lists.
 
-To force a particular implementation, set the package variable $MERGE_METHOD to
-one of these constants:
+To force a particular implementation, set the package variable C<$MERGE_METHOD>
+to one of these constants:
 
 =over 4
 
@@ -329,11 +329,11 @@ one of these constants:
 
 =head1 TODO
 
-* Support comparitive orderings, where no mapping from elements to integers
-exists but a well-defined ordering exists for which a comparison callback
+* Support comparative orderings, where no mapping from elements to integers
+exists but a well-defined ordering exists for which a two-element comparison
 callback can be provided.
 
-* Allow modification of the heuristics based on local benchmarks.
+* Allow modification of the heuristics (perhaps based on local benchmarks).
 
 =head1 AUTHOR
 
@@ -344,7 +344,7 @@ Adam Thomason, E<lt>athomason@cpan.orgE<gt>
 Copyright (C) 2010 by Say Media Inc <cpan@saymedia.com>
 
 This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.8.6 or,
+it under the same terms as Perl itself, either Perl version 5.8.9 or,
 at your option, any later version of Perl 5 you may have available.
 
 =cut
