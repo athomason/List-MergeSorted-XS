@@ -73,7 +73,7 @@ find %{buildroot}%{_prefix}             \
 
 %{__perl} -MFile::Find -le '
     find({ wanted => \&wanted, no_chdir => 1}, "%{buildroot}");
-    print "%doc  Changes fallback README";
+    print "%doc  Changes README";
     for my $x (sort @dirs, @files) {
         push @ret, $x unless indirs($x);
         }
