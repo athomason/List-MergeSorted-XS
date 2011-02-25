@@ -249,7 +249,7 @@ The constituent lists must meet these preconditions for correct behavior:
 =over 4
 
 =item * either each element of each list is an integer or an integer may be
-        computed from the element using the C<keyer> parameter below
+        computed from the element using the C<key_cb> parameter below
 
 =item * each list is pre-sorted in ascending order
 
