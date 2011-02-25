@@ -249,7 +249,7 @@ The constituent lists must meet these preconditions for correct behavior:
 =over 4
 
 =item * either each element of each list is an integer or an integer may be
-        computed from the element using the C<keyer> parameter below
+        computed from the element using the C<key_cb> parameter below
 
 =item * each list is pre-sorted in ascending order
 
@@ -287,8 +287,8 @@ If no uniq_cb is passed, duplicates are allowed in the output.
 
 =head1 NOTES
 
-Only ascending order is supported. To merge lists which sorted in descending
-order, use C<< key_cb => sub { -$_[0] } >>.
+Only ascending order is supported. To merge lists which are sorted in
+descending order, use C<< key_cb => sub { -$_[0] } >>.
 
 =head1 EXPORTS
 
@@ -296,7 +296,7 @@ None by default, C<merge> at request.
 
 =head1 ALGORITHM
 
-The algorithm used to merge the lists is heurisitcally chosen based on the
+The algorithm used to merge the lists is heuristically chosen based on the
 number of lists (N), the total number of elements in the lists (M), and the
 requested limit (L). (The heuristic constants were determined by analysis of
 benchmarks on a 2.5GHz Intel Xeon where all data fit in memory.)
