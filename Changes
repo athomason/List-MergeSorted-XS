@@ -1,5 +1,8 @@
 Revision history for Perl extension List::MergeSorted::XS
 
+1.04  Tue Mar 15 00:37:22 PDT 2011
+    - use merge's parameter hash instead of package variable for forcing algorithm
+    - pod improvements
 1.03  Tue Dec 14 13:23:24 PST 2010
     - fix incorrectly spelled instances of uniq_cb
 1.02  Tue Dec 14 11:25:46 PST 2010

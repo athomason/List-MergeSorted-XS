@@ -10,15 +10,14 @@ use AutoLoader;
 
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/merge/;
+our @EXPORT_OK = qw(merge);
 our @EXPORT = qw();
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 require XSLoader;
 XSLoader::load('List::MergeSorted::XS', $VERSION);
 
-our $MERGE_METHOD;
 use constant {
     PRIO_LINEAR => 0,
     PRIO_FIB    => 1,
@@ -43,21 +42,21 @@ sub merge {
     die "limit must be positive" if defined $limit && $limit < 0;
 
     die "key_cb option must be a coderef"
-        if $opts{key_cb} && ref $opts{key_cb} ne 'CODE';
+        if defined $opts{key_cb} && ref $opts{key_cb} ne 'CODE';
 
     die "uniq_cb option must be a coderef"
-        if $opts{uniq_cb} && ref $opts{uniq_cb} ne 'CODE';
+        if defined $opts{uniq_cb} && ref $opts{uniq_cb} ne 'CODE';
 
     return [] unless @$lists;
 
     # pick an algorithm
     my @params = ($lists, $limit, $opts{key_cb}, $opts{uniq_cb});
 
-    if (defined $MERGE_METHOD) {
-        return _merge($MERGE_METHOD, @params);
+    if (defined $opts{method}) {
+        return _merge($opts{method}, @params);
     }
 
-    if ($opts{key_cb}) {
+    if (defined $opts{key_cb}) {
         # linear priority queue is faster until ~100 lists, relatively
         # independent of limit %. sort never wins in keyed mode because of
         # Schwartzian tx overhead
@@ -121,7 +120,7 @@ sub _merge {
                                   : _merge_sort_flat_dupeok($lists, $limit);
     }
     else {
-        die "unknown sort method $MERGE_METHOD requested\n";
+        die "unknown sort method $method requested\n";
     }
 }
 
@@ -281,6 +280,14 @@ same key.
 
 If no uniq_cb is passed, duplicates are allowed in the output.
 
+=item * method
+
+Specifies the algorithm to use to merge the lists. Is provided, the value must
+be one of the constants listed below under L<ALGORITHM>.
+
+If no B<method> is given, one is chosen automatically based upon the input
+data. This is generally recommended.
+
 =back
 
 =back
@@ -304,8 +311,8 @@ benchmarks on a 2.5GHz Intel Xeon where all data fit in memory.)
 When there are many lists and the element limit is a significant fraction of
 the total element count (L/M > 1/4), perl's built-in C<sort> is used to order
 the concatenated lists. The time complexity is C<O(M log M)>. Since this method
-always processes the full list it cannot short-circuit in the highly-limited
-case, as do the priority queue methods.
+always processes the full list, it cannot short-circuit in the highly-limited
+case (as the priority queue methods do).
 
 When L is a smaller fraction of M, a priority queue is used to track the list
 heads. For small N, this is implemented as a linked list kept in sorted order
@@ -314,8 +321,8 @@ N, a Fibonacci heap is used, for a time complexity of C<O(L log N)>. The linked
 list has less bookkeeping overhead than the heap, so it is more efficient for
 fewer lists.
 
-To force a particular implementation, set the package variable C<$MERGE_METHOD>
-to one of these constants:
+To force a particular implementation, pass the C<method> parameter to C<merge>
+with one of these constants:
 
 =over 4
 
