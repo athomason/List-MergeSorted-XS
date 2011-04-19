@@ -130,7 +130,7 @@ sub _merge {
 sub _merge_sort_flat_dupeok {
     my ($lists, $limit) = @_;
 
-    my @output = sort {$a <=> $b} map {@$_} @$lists;
+    my @output = sort {$a cmp $b} map {@$_} @$lists;
     splice @output, $limit if $limit && @output > $limit;
     return \@output;
 }
@@ -139,12 +139,12 @@ sub _merge_sort_keyed_dupeok {
     my ($lists, $limit, $keyer) = @_;
 
     # Schwartzian transform is faster than sorting on
-    # {$keyer->($a) <=> # $keyer->($b)}, even for degenerately simple case
+    # {$keyer->($a) cmp # $keyer->($b)}, even for degenerately simple case
     # of $keyer = sub { $_[0] }
 
     my @output =
         map  { $_->[1] }
-        sort { $a->[0] <=> $b->[0] }
+        sort { $a->[0] cmp $b->[0] }
         map  { [$keyer->($_), $_] }
         map  { @$_ }
         @$lists;
@@ -156,7 +156,7 @@ sub _merge_sort_keyed_dupeok {
 sub _merge_sort_flat_dedupe {
     my ($lists, $limit, $uniquer) = @_;
 
-    my @merged = sort {$a <=> $b} map {@$_} @$lists;
+    my @merged = sort {$a cmp $b} map {@$_} @$lists;
 
     my @output;
     my $last_unique = undef;
@@ -175,7 +175,7 @@ sub _merge_sort_keyed_dedupe {
 
     my @merged =
         map  { $_->[1] }
-        sort { $a->[0] <=> $b->[0] }
+        sort { $a->[0] cmp $b->[0] }
         map  { [$keyer->($_), $_] }
         map  { @$_ }
         @$lists;

@@ -22,17 +22,17 @@
 
 static
 inline
-IV key_from_iv(SV* el) {
-    if (SvIOK(el))
-        return SvIV(el);
+const char* key_from_pv(SV* el) {
+    if (SvPOK(el))
+        return SvPV_nolen(el);
     else
-        croak("non-integer data encountered");
+        croak("non-string data encountered");
     return 0;
 }
 
 static
 inline
-IV callback_value(SV* el, SV* callback)
+const char* callback_value(SV* el, SV* callback)
 {
     int ret;
 
@@ -47,10 +47,18 @@ IV callback_value(SV* el, SV* callback)
     if (!ret)
         croak("callback did not return a value");
 
-    IV value = POPi;
+    const char* value = POPp;
     PUTBACK;
 
     return value;
+}
+
+static
+inline
+int
+lmsxs_prio_ent_cmp (void* a, void* b)
+{
+    return strcmp(((lmsxs_prio_ent*) a)->key, ((lmsxs_prio_ent*) b)->key);
 }
 
 MODULE = List::MergeSorted::XS  PACKAGE = List::MergeSorted::XS  PREFIX = l_ms_xs
@@ -85,7 +93,8 @@ CODE:
     IV numlists = av_len(lists) + 1;
     int n;
 
-    struct fibheap* heads = fh_makekeyheap();
+    struct fibheap* heads = fh_makeheap();
+    fh_setcmp(heads, lmsxs_prio_ent_cmp);
 
     for (n = 0; n < numlists; n++) {
         AV* list = (AV*) SvRV(*av_fetch(lists, n, 0));
@@ -93,10 +102,10 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = key_from_iv(el);
+        const char* key = key_from_pv(el);
 
         lmsxs_prio_ent* ent = lmsxs_make_ent(el, n, 0);
-        fh_insertkey(heads, key, ent);;
+        fh_insert(heads, ent);;
     }
 
     for (n = 0; !fh_empty(heads) && (!limit || n < limit); ) {
@@ -109,9 +118,9 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = key_from_iv(el);
+            const char* key = key_from_pv(el);
             ent->sv = el;
-            fh_insertkey(heads, key, ent);
+            fh_insert(heads, ent);
         }
         else {
             lmsxs_free_ent(ent);
@@ -137,7 +146,8 @@ CODE:
     IV numlists = av_len(lists) + 1;
     int n;
 
-    struct fibheap* heads = fh_makekeyheap();
+    struct fibheap* heads = fh_makeheap();
+    fh_setcmp(heads, lmsxs_prio_ent_cmp);
 
     for (n = 0; n < numlists; n++) {
         AV* list = (AV*) SvRV(*av_fetch(lists, n, 0));
@@ -145,19 +155,19 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = key_from_iv(el);
+        const char* key = key_from_pv(el);
 
         lmsxs_prio_ent* ent = lmsxs_make_ent(el, n, 0);
-        fh_insertkey(heads, key, ent);;
+        fh_insert(heads, ent);;
     }
 
-    IV last_unique;
+    const char* last_unique;
     for (n = 0; !fh_empty(heads) && (!limit || n < limit); ) {
         AV* list;
         lmsxs_prio_ent* ent = (lmsxs_prio_ent*) fh_extractmin(heads);
 
-        IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        const char* unique = callback_value(ent->sv, uniquer);
+        if (!n || strcmp(unique, last_unique)) {
             av_push(results, newSVsv(ent->sv));
             n++;
             last_unique = unique;
@@ -166,9 +176,9 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = key_from_iv(el);
+            const char* key = key_from_pv(el);
             ent->sv = el;
-            fh_insertkey(heads, key, ent);
+            fh_insert(heads, ent);
         }
         else {
             lmsxs_free_ent(ent);
@@ -194,7 +204,8 @@ CODE:
     IV numlists = av_len(lists) + 1;
     int n;
 
-    struct fibheap* heads = fh_makekeyheap();
+    struct fibheap* heads = fh_makeheap();
+    fh_setcmp(heads, lmsxs_prio_ent_cmp);
 
     for (n = 0; n < numlists; n++) {
         AV* list = (AV*) SvRV(*av_fetch(lists, n, 0));
@@ -202,10 +213,10 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = callback_value(el, keyer);
+        const char* key = callback_value(el, keyer);
 
         lmsxs_prio_ent* ent = lmsxs_make_ent(el, n, 0);
-        fh_insertkey(heads, key, ent);;
+        fh_insert(heads, ent);;
     }
 
     for (n = 0; !fh_empty(heads) && (!limit || n < limit); ) {
@@ -218,9 +229,9 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = callback_value(el, keyer);
+            const char* key = callback_value(el, keyer);
             ent->sv = el;
-            fh_insertkey(heads, key, ent);
+            fh_insert(heads, ent);
         }
         else {
             lmsxs_free_ent(ent);
@@ -247,7 +258,8 @@ CODE:
     IV numlists = av_len(lists) + 1;
     int n;
 
-    struct fibheap* heads = fh_makekeyheap();
+    struct fibheap* heads = fh_makeheap();
+    fh_setcmp(heads, lmsxs_prio_ent_cmp);
 
     for (n = 0; n < numlists; n++) {
         AV* list = (AV*) SvRV(*av_fetch(lists, n, 0));
@@ -255,19 +267,19 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = callback_value(el, keyer);
+        const char* key = callback_value(el, keyer);
 
         lmsxs_prio_ent* ent = lmsxs_make_ent(el, n, 0);
-        fh_insertkey(heads, key, ent);;
+        fh_insert(heads, ent);;
     }
 
-    IV last_unique;
+    const char* last_unique;
     for (n = 0; !fh_empty(heads) && (!limit || n < limit); ) {
         AV* list;
         lmsxs_prio_ent* ent = (lmsxs_prio_ent*) fh_extractmin(heads);
 
-        IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        const char* unique = callback_value(ent->sv, uniquer);
+        if (!n || strcmp(unique, last_unique)) {
             av_push(results, newSVsv(ent->sv));
             n++;
             last_unique = unique;
@@ -276,9 +288,9 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = callback_value(el, keyer);
+            const char* key = callback_value(el, keyer);
             ent->sv = el;
-            fh_insertkey(heads, key, ent);
+            fh_insert(heads, ent);
         }
         else {
             lmsxs_free_ent(ent);
@@ -311,7 +323,7 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = key_from_iv(el);
+        const char* key = key_from_pv(el);
 
         lmsxs_ll_ent* ent = lmsxs_ll_make_ent(key, el, n, 0);
         lmsxs_ll_insert_ent(&heads, ent);;
@@ -327,7 +339,7 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = key_from_iv(el);
+            const char* key = key_from_pv(el);
             ent->sv = el;
             ent->key = key;
             lmsxs_ll_insert_ent(&heads, ent);
@@ -363,19 +375,19 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = key_from_iv(el);
+        const char* key = key_from_pv(el);
 
         lmsxs_ll_ent* ent = lmsxs_ll_make_ent(key, el, n, 0);
         lmsxs_ll_insert_ent(&heads, ent);;
     }
 
-    IV last_unique;
+    const char* last_unique;
     for (n = 0; heads && (!limit || n < limit); ) {
         AV* list;
         lmsxs_ll_ent* ent = lmsxs_ll_pop_ent(&heads);
 
-        IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        const char* unique = callback_value(ent->sv, uniquer);
+        if (!n || strcmp(unique, last_unique)) {
             av_push(results, newSVsv(ent->sv));
             n++;
             last_unique = unique;
@@ -384,7 +396,7 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = key_from_iv(el);
+            const char* key = key_from_pv(el);
             ent->sv = el;
             ent->key = key;
             lmsxs_ll_insert_ent(&heads, ent);
@@ -420,7 +432,7 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = callback_value(el, keyer);
+        const char* key = callback_value(el, keyer);
 
         lmsxs_ll_ent* ent = lmsxs_ll_make_ent(key, el, n, 0);
         lmsxs_ll_insert_ent(&heads, ent);;
@@ -436,7 +448,7 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = callback_value(el, keyer);
+            const char* key = callback_value(el, keyer);
             ent->sv = el;
             ent->key = key;
             lmsxs_ll_insert_ent(&heads, ent);
@@ -473,19 +485,19 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = callback_value(el, keyer);
+        const char* key = callback_value(el, keyer);
 
         lmsxs_ll_ent* ent = lmsxs_ll_make_ent(key, el, n, 0);
         lmsxs_ll_insert_ent(&heads, ent);;
     }
 
-    IV last_unique;
+    const char* last_unique;
     for (n = 0; heads && (!limit || n < limit); ) {
         AV* list;
         lmsxs_ll_ent* ent = lmsxs_ll_pop_ent(&heads);
 
-        IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        const char* unique = callback_value(ent->sv, uniquer);
+        if (!n || strcmp(unique, last_unique)) {
             av_push(results, newSVsv(ent->sv));
             n++;
             last_unique = unique;
@@ -494,7 +506,7 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = callback_value(el, keyer);
+            const char* key = callback_value(el, keyer);
             ent->sv = el;
             ent->key = key;
             lmsxs_ll_insert_ent(&heads, ent);

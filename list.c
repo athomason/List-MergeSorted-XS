@@ -5,7 +5,7 @@
 #include "list.h"
 
 lmsxs_ll_ent*
-lmsxs_ll_make_ent(IV key, SV* sv, IV list_num, IV list_idx)
+lmsxs_ll_make_ent(const char* key, SV* sv, IV list_num, IV list_idx)
 {
     lmsxs_ll_ent* ent;
     Newxz(ent, 1, lmsxs_ll_ent);
@@ -40,7 +40,7 @@ lmsxs_ll_insert_ent(lmsxs_ll_ent** list, lmsxs_ll_ent* new_ent)
         cur;
         ptr_to_cur = &((*ptr_to_cur)->next), cur = cur->next
     ) {
-        if (new_ent->key < cur->key) {
+        if (strcmp(new_ent->key, cur->key) < 0) {
             new_ent->next = cur;
             *ptr_to_cur = new_ent;
             return;

@@ -20,7 +20,7 @@ my %impls = (
     },
     fib => {
         type    => 'lmsxs_prio_ent',
-        insert  => 'fh_insertkey(heads, key, ent);',
+        insert  => 'fh_insert(heads, ent);',
         pop     => '(lmsxs_prio_ent*) fh_extractmin(heads)',
         alloc   => 'lmsxs_make_ent(el, n, 0)',
         free    => 'lmsxs_free_ent',
@@ -48,7 +48,7 @@ for my $impl (sort keys %impls) {
             push @params, 'uniquer' if $dedupe;
             $vars{params} = join ', ', @params;
 
-            $vars{key} = $keyed ? 'callback_value(el, keyer)' : 'key_from_iv(el)';
+            $vars{key} = $keyed ? 'callback_value(el, keyer)' : 'key_from_pv(el)';
 
             my $template_text = <<END_XS;
 
@@ -67,7 +67,8 @@ CODE:
     [% IF impl == "linear" %]
     lmsxs_ll_ent* heads = NULL;
     [% ELSIF impl == "fib" %]
-    struct fibheap* heads = fh_makekeyheap();
+    struct fibheap* heads = fh_makeheap();
+    fh_setcmp(heads, lmsxs_prio_ent_cmp);
     [% END %]
 
     for (n = 0; n < numlists; n++) {
@@ -76,20 +77,20 @@ CODE:
             continue;
 
         SV* el = *av_fetch(list, 0, 0);
-        IV key = [% key %];
+        const char* key = [% key %];
 
         [% type %]* ent = [% alloc %];
         [% insert %];
     }
 
-    [% IF dedupe %]IV last_unique;[% END %]
+    [% IF dedupe %]const char* last_unique;[% END %]
     for (n = 0; [% more %] && (!limit || n < limit); ) {
         AV* list;
         [% type %]* ent = [% pop %];
 
         [% IF dedupe %]
-        IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        const char* unique = callback_value(ent->sv, uniquer);
+        if (!n || strcmp(unique, last_unique)) {
             av_push(results, newSVsv(ent->sv));
             n++;
             last_unique = unique;
@@ -102,7 +103,7 @@ CODE:
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
         if (++ent->list_idx <= av_len(list)) {
             SV* el = *av_fetch(list, ent->list_idx, 0);
-            IV key = [% key %];
+            const char* key = [% key %];
             ent->sv = el;
             [% IF impl == 'linear' %]ent->key = key;[% END %]
             [% insert %]
@@ -157,17 +158,17 @@ __DATA__
 
 static
 inline
-IV key_from_iv(SV* el) {
-    if (SvIOK(el))
-        return SvIV(el);
+const char* key_from_pv(SV* el) {
+    if (SvPOK(el))
+        return SvPV_nolen(el);
     else
-        croak("non-integer data encountered");
+        croak("non-string data encountered");
     return 0;
 }
 
 static
 inline
-IV callback_value(SV* el, SV* callback)
+const char* callback_value(SV* el, SV* callback)
 {
     int ret;
 
@@ -182,10 +183,18 @@ IV callback_value(SV* el, SV* callback)
     if (!ret)
         croak("callback did not return a value");
 
-    IV value = POPi;
+    const char* value = POPp;
     PUTBACK;
 
     return value;
+}
+
+static
+inline
+int
+lmsxs_prio_ent_cmp (void* a, void* b)
+{
+    return strcmp(((lmsxs_prio_ent*) a)->key, ((lmsxs_prio_ent*) b)->key);
 }
 
 MODULE = List::MergeSorted::XS  PACKAGE = List::MergeSorted::XS  PREFIX = l_ms_xs
