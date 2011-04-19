@@ -342,6 +342,10 @@ callback can be provided.
 
 * Allow modification of the heuristics (perhaps based on local benchmarks).
 
+=head1 SEE ALSO
+
+John-Mark Gurney's Fibonacci heap library L<fib|http://resnet.uoregon.edu/~gurney_j/jmpc/fib.html>
+
 =head1 AUTHOR
 
 Adam Thomason, E<lt>athomason@cpan.orgE<gt>
