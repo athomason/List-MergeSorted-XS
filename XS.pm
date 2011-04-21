@@ -181,12 +181,11 @@ sub _merge_sort_keyed_dedupe {
         @$lists;
 
     my @output;
-    my $last_unique = undef;
+    my %seen;
     for my $element (@merged) {
         my $unique = $uniquer->($element);
-        next if defined $last_unique && $unique == $last_unique;
+        next if $seen{$unique}++;
         push @output, $element;
-        $last_unique = $unique;
     }
 
     splice @output, $limit if $limit && @output > $limit;

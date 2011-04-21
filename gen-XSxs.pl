@@ -82,17 +82,19 @@ CODE:
         [% insert %];
     }
 
-    [% IF dedupe %]IV last_unique;[% END %]
+    [% IF dedupe %]HV* seen = (HV*) sv_2mortal((SV*) newHV());
+    char uniqbuf[10];[% END %]
     for (n = 0; [% more %] && (!limit || n < limit); ) {
         AV* list;
         [% type %]* ent = [% pop %];
 
         [% IF dedupe %]
         IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        int uniqlen = sprintf(uniqbuf, "%d", unique);
+        if (!hv_exists(seen, uniqbuf, uniqlen)) {
             av_push(results, newSVsv(ent->sv));
             n++;
-            last_unique = unique;
+            hv_store(seen, uniqbuf, uniqlen, newSViv(1), 0);
         }
         [% ELSE %]
         av_push(results, newSVsv(ent->sv));

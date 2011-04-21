@@ -151,16 +151,18 @@ CODE:
         fh_insertkey(heads, key, ent);;
     }
 
-    IV last_unique;
+    HV* seen = (HV*) sv_2mortal((SV*) newHV());
+    char uniqbuf[10];
     for (n = 0; !fh_empty(heads) && (!limit || n < limit); ) {
         AV* list;
         lmsxs_prio_ent* ent = (lmsxs_prio_ent*) fh_extractmin(heads);
 
         IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        int uniqlen = sprintf(uniqbuf, "%d", unique);
+        if (!hv_exists(seen, uniqbuf, uniqlen)) {
             av_push(results, newSVsv(ent->sv));
             n++;
-            last_unique = unique;
+            hv_store(seen, uniqbuf, uniqlen, newSViv(1), 0);
         }
 
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
@@ -261,16 +263,18 @@ CODE:
         fh_insertkey(heads, key, ent);;
     }
 
-    IV last_unique;
+    HV* seen = (HV*) sv_2mortal((SV*) newHV());
+    char uniqbuf[10];
     for (n = 0; !fh_empty(heads) && (!limit || n < limit); ) {
         AV* list;
         lmsxs_prio_ent* ent = (lmsxs_prio_ent*) fh_extractmin(heads);
 
         IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        int uniqlen = sprintf(uniqbuf, "%d", unique);
+        if (!hv_exists(seen, uniqbuf, uniqlen)) {
             av_push(results, newSVsv(ent->sv));
             n++;
-            last_unique = unique;
+            hv_store(seen, uniqbuf, uniqlen, newSViv(1), 0);
         }
 
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
@@ -369,16 +373,18 @@ CODE:
         lmsxs_ll_insert_ent(&heads, ent);;
     }
 
-    IV last_unique;
+    HV* seen = (HV*) sv_2mortal((SV*) newHV());
+    char uniqbuf[10];
     for (n = 0; heads && (!limit || n < limit); ) {
         AV* list;
         lmsxs_ll_ent* ent = lmsxs_ll_pop_ent(&heads);
 
         IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        int uniqlen = sprintf(uniqbuf, "%d", unique);
+        if (!hv_exists(seen, uniqbuf, uniqlen)) {
             av_push(results, newSVsv(ent->sv));
             n++;
-            last_unique = unique;
+            hv_store(seen, uniqbuf, uniqlen, newSViv(1), 0);
         }
 
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
@@ -479,16 +485,18 @@ CODE:
         lmsxs_ll_insert_ent(&heads, ent);;
     }
 
-    IV last_unique;
+    HV* seen = (HV*) sv_2mortal((SV*) newHV());
+    char uniqbuf[10];
     for (n = 0; heads && (!limit || n < limit); ) {
         AV* list;
         lmsxs_ll_ent* ent = lmsxs_ll_pop_ent(&heads);
 
         IV unique = callback_value(ent->sv, uniquer);
-        if (!n || unique != last_unique) {
+        int uniqlen = sprintf(uniqbuf, "%d", unique);
+        if (!hv_exists(seen, uniqbuf, uniqlen)) {
             av_push(results, newSVsv(ent->sv));
             n++;
-            last_unique = unique;
+            hv_store(seen, uniqbuf, uniqlen, newSViv(1), 0);
         }
 
         list = (AV*) SvRV(*av_fetch(lists, ent->list_num, 0));
