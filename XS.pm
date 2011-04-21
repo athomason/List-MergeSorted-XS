@@ -281,7 +281,7 @@ If no uniq_cb is passed, duplicates are allowed in the output.
 
 =item * method
 
-Specifies the algorithm to use to merge the lists. Is provided, the value must
+Specifies the algorithm to use to merge the lists. If provided, the value must
 be one of the constants listed below under L<ALGORITHM>.
 
 If no B<method> is given, one is chosen automatically based upon the input
