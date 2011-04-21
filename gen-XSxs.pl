@@ -83,14 +83,14 @@ CODE:
     }
 
     [% IF dedupe %]HV* seen = (HV*) sv_2mortal((SV*) newHV());
-    char uniqbuf[10];[% END %]
+    char uniqbuf[16];[% END %]
     for (n = 0; [% more %] && (!limit || n < limit); ) {
         AV* list;
         [% type %]* ent = [% pop %];
 
         [% IF dedupe %]
         IV unique = callback_value(ent->sv, uniquer);
-        int uniqlen = sprintf(uniqbuf, "%d", unique);
+        int uniqlen = snprintf(uniqbuf, 16, "%d", unique);
         if (!hv_exists(seen, uniqbuf, uniqlen)) {
             av_push(results, newSVsv(ent->sv));
             n++;
