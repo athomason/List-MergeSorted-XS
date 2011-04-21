@@ -13,7 +13,7 @@ our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(merge);
 our @EXPORT = qw();
 
-our $VERSION = '1.04';
+our $VERSION = '1.05';
 
 require XSLoader;
 XSLoader::load('List::MergeSorted::XS', $VERSION);
@@ -351,7 +351,7 @@ Adam Thomason, E<lt>athomason@cpan.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2010 by Say Media Inc <cpan@saymedia.com>
+Copyright (C) 2011 by Say Media Inc <cpan@saymedia.com>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.9 or,

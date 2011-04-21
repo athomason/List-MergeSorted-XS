@@ -2,10 +2,11 @@
 %define filelist %{pkgname}-%{version}-filelist
 %define NVR %{pkgname}-%{version}-%{release}
 %define maketest 1
+%define VERSION %(grep 'VERSION =' XS.pm | perl -nle '/([0-9.]+)/ && print $1')
 
 name:      perl-List-MergeSorted-XS
 summary:   List-MergeSorted-XS - Fast decoder for URL parameter strings
-version:   1.03
+version:   %{VERSION}
 release:   1
 vendor:    Adam Thomason <athomason@cpan.org>
 packager:  Arix International <cpan2rpm@arix.com>

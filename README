@@ -1,4 +1,4 @@
-List-MergeSorted-XS 1.04
+List-MergeSorted-XS 1.05
 ========================
 
 This module takes a set of presorted lists and returns the sorted union of
@@ -17,7 +17,7 @@ COPYRIGHT AND LICENCE
 
 Written by Adam Thomason, <athomason@cpan.org>
 
-Copyright (C) 2010 by Say Media Inc <cpan@saymedia.com>
+Copyright (C) 2011 by Say Media Inc <cpan@saymedia.com>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.6 or,

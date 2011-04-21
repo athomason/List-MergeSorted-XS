@@ -1,5 +1,10 @@
 Revision history for Perl extension List::MergeSorted::XS
 
+1.05  Thu Apr 21 12:47:54 PDT 2011
+    - use hash of seen unique values instead of comparing to last to fix corner
+      case where duplicated elements that compare the same but have different
+      unique values may not be deduped correctly
+    - fix use of forced-algorithm in test
 1.04  Tue Mar 15 00:37:22 PDT 2011
     - use merge's parameter hash instead of package variable for forcing algorithm
     - pod improvements
