@@ -1,5 +1,7 @@
 Revision history for Perl extension List::MergeSorted::XS
 
+1.06  Thu May  9 14:25:05 PDT 2013
+    - Fix parameter name in synopsis. Thanks Yauheni Kryudziuk.
 1.05  Thu Apr 21 12:47:54 PDT 2011
     - use hash of seen unique values instead of comparing to last to fix corner
       case where duplicated elements that compare the same but have different
